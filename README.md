@@ -1,27 +1,130 @@
-# Task 1 Implementation Summary
+## Task 1 – Portfolio Risk Calculator: My Development Journey
 
-I started by understanding the full problem statement carefully and created a strong prompt for ChatGPT so it could explain the problem in simple English. My goal was to clearly understand what needed to be solved, what evaluators were expecting, and how to maximize marks according to the evaluation schema.
+**1. Understanding the problem and tech stack**
 
-After that, I asked for a detailed step-by-step implementation prompt that covered all topics, including bonus questions, input/output handling, and the best tech stack for the project. I specifically asked it to respond as an expert in wealth management, AI, and portfolio risk analysis so the guidance would be practical and professional rather than generic.
+First, I gave this prompt to ChatGPT:
 
-While working on Task 1, I checked whether I should use NumPy and Pandas in `models.py` for better accuracy. DeepSeek analyzed my code and suggested that my current simple Python logic was already the better choice. Since the task only involved a maximum of around 3 assets, using NumPy or Pandas would add unnecessary complexity without improving performance. Simple Python made the code easier to debug, explain, and defend during interviews. I decided to continue with my current logic because if the asset count increases significantly in the future (like 10,000+ assets), NumPy or Pandas can always be added later without any problem.
+> “I have uploaded the PDF. From this, explain the problem statement very clearly in simple English. What do we need to solve so that we can get the best marks according to the evaluation schema? Give me a general idea of how to implement this problem.”
 
-Then I used Claude to help decide the best overall tech stack for the entire project. I uploaded the problem statement description and asked for a professional breakdown of Task Overview, Tech Stack Decision, Project Structure, Folder Structure, README strategy, and step-by-step implementation for each task. I specifically requested production-quality thinking and startup-level architecture so the project would look like work from someone ready to join Timecell, not just an assignment submission.
+ChatGPT explained the problem clearly, and I got a solid understanding of the project.
 
-Claude provided guidance on the project structure, recommended Python files for implementation, and explained why CLI-first solutions were better for this assignment. Based on that, I created the required Python files and started implementing each section of Task 1.
+**2. Getting a detailed step‑by‑step prompt**
 
-Once the initial code was written, I verified the formulas and logic using multiple AI tools and different trusted sources to ensure that the portfolio calculations were mathematically correct. I wanted to make sure the formulas were reliable before moving forward.
+My next prompt was:
+
+> “Based on the provided PDF, give me a detailed prompt that will help me build this project step by step in an easy manner, covering each topic in detail, including inputs, outputs, and bonus questions. Write a strict prompt by stating that you have expertise in wealth management, the AI domain, and portfolio risk analysis. In the prompt, also mention which tech stack I should use for this project and why that specific stack should be used, with proper reasons.”
+
+ChatGPT generated a comprehensive prompt as follow :
+> You are a senior Wealth Management Engineer, Portfolio Risk Analyst, and AI Systems Architect with deep expertise in high-net-worth portfolio management, Indian financial markets, portfolio risk modeling, crash survival analysis, asset allocation strategy, wealth advisory systems, AI-powered financial assistants, MCP architecture, prompt engineering, and production-grade Python development.
+>
+> You have experience building systems exactly like Timecell.ai and understand how top-tier wealth management platforms work for Indian HNI families.
+>
+> Your job is to help me WIN this Timecell internship assignment by guiding me step-by-step like a real mentor.
+>
+> I do NOT want rushed answers.  
+> I want production-quality thinking, clean architecture, and strong submission strategy.
+>
+> Your instructions:
+>
+> 1. Solve all 4 tasks step-by-step in the best possible professional way.
+> 2. For each task, explain in this exact structure:
+>
+> ## TASK OVERVIEW
+> * What the problem is really testing
+> * What interviewers are secretly looking for
+> * Common mistakes candidates make
+> * Best strategy to score maximum points
+>
+> ## TECH STACK DECISION
+> * Best libraries/tools to use
+> * Why each tool is chosen
+> * Why some tools should be avoided
+> * Whether Claude / Gemini / OpenAI is better and why
+> * Whether LangChain is useful
+> * Whether LangGraph is useful
+> * Whether MCP can be used strategically
+>
+> ## PROJECT STRUCTURE
+> * Folder structure
+> * File naming
+> * Clean GitHub repo structure
+> * Professional README strategy
+>
+> ## STEP-BY-STEP IMPLEMENTATION
+> (with steps 1,2,3,4 and sub‑details)
+>
+> ## FULL PYTHON CODE
+> (clean, production‑ready code)
+>
+> ## BONUS QUESTIONS
+> (how to solve and impress)
+>
+> ## README STRATEGY
+> (what to write, how to explain AI usage)
+>
+> ## LOOM VIDEO STRATEGY
+> (what to say in 3‑5 minutes)
+>
+> ## FINAL SELECTION STRATEGY
+> (which tasks matter most, what gets candidates rejected)
+>
+> 3. Prioritize real startup thinking over textbook answers.
+> 4. Think like the first engineering hire at Timecell, not like an exam student.
+> 5. Prefer CLI-first solutions because Timecell is built inside Claude Code.
+> 6. Keep solutions realistic, practical, and explainable in interviews.
+> 7. Help me create a submission that looks like someone ready to work at Timecell, not just someone solving an assignment.
+> 8. Be brutally honest if something is weak and suggest stronger alternatives.
+> 9. Do not give generic advice. Give expert-level strategic guidance.
+> 10. Start with Task 01 first and do not move to Task 02 until Task 01 is fully completed.
+>
+> We will complete all tasks one by one and optimize for selection, not just completion.
+
+
+
+**3. Using Claude for tech stack and project structure**
+
+I took that prompt together with the PDF description and provided it to Claude (with extended thinking). Claude helped me decide the best overall tech stack for the entire project, guided me on project structure, recommended which Python files to create, and explained why CLI‑first solutions are better for this assignment. Based on that advice, I created the required Python files and started implementing Task 1 section by section.
+
+**4. Deciding not to use NumPy/Pandas**
+
+I asked DeepSeek whether I should use NumPy and Pandas in `models.py` for better accuracy. DeepSeek analysed my code and suggested that my current simple Python logic was actually the better choice:
+
+- No extra dependencies – runs anywhere with Python 3.10+.
+- Easier to debug – plain loops and arithmetic are transparent.
+- Faster for small portfolios (max ~3 assets) – vectorisation adds no benefit.
+- Easier to explain and defend in interviews.
+
+I decided to continue with my current logic. If the asset count ever grows significantly (e.g., 10,000+ assets), NumPy/Pandas can be added later without any problem.
+
+**5. Verifying formulas and logic**
+
+Once the initial code was written, I manually verified the formulas and logic using multiple AI tools and different trusted sources to ensure the portfolio calculations were mathematically correct. I wanted to be certain the formulas were reliable before moving forward.
+
+**6. Testing and fixing missing libraries**
 
 After writing the code, I tested everything using the terminal. During testing, I found that some required libraries were missing, so I installed them using GitHub Copilot Free inside VS Code.
 
-Next, I noticed that the output formatting in `visualize.py` was not looking clean or professional. To improve the presentation, I used the GPT-5.2 Code Model inside GitHub Copilot and gave a prompt to redesign the output so it would look well-structured, readable, and properly separated with good spacing. This improved the final terminal output significantly.
+**7. Improving visual output**
 
-After that, I realized there were still many missing edge cases inside `main.py`. I went to DeepSeek and gave a prompt asking it to add all possible edge cases, especially for every `if-else` condition used inside the risk calculator, and also provide example cases for each condition. It returned updated code files with better validation and safer logic.
+I noticed that the output formatting in `visualiser.py` was not clean or professional. To improve the presentation, I used the GPT‑5.2 Code Model inside GitHub Copilot and gave a prompt 
+> " use visualiser.py and improved the code To redesign the output so it would look well‑structured, readable, and properly separated with good spacing."
+This improved the final terminal output significantly.
 
-However, after running the updated code, I found an error related to the “no-assets” edge case. I copied the same code back to DeepSeek and realized there was something wrong in the calculator file, so I asked it to generate the calculator logic again.
+**8. Adding edge cases and fixing errors**
 
-Even in the regenerated version, one important edge case was still missing. I manually identified and fixed that case myself. After that correction, all edge cases worked properly, and the program handled all expected scenarios successfully.
+I realised there were still many missing edge cases inside `main.py`. I went to DeepSeek and gave a prompt asking it to 
+> add all possible edge cases – especially for every `if-else` condition used inside the risk calculator – and to provide example cases for each condition.
 
-Finally, I used GPT again to improve code readability by converting variable names into meaningful names such as `total_allocation`, `post_crash_asset_value`, and similar descriptive names. I also asked it to add simple English comments and improve the code structure so that the project would look professional, understandable.
+DeepSeek returned updated code files with better validation and safer logic.
+However, after running the updated code, I found an error related to the “no‑assets” edge case. I copied the same code back to DeepSeek and realised there was something wrong in the calculator file, so I asked it to generate the calculator logic again.
 
-In this way, I completed Task 1 with proper logic verification, edge case handling, clean code structure, professional formatting, and strong implementation quality.
+Even in the regenerated version, one important edge case was still missing. I manually identified and fixed that case myself. After that correction, all edge cases worked properly, and the program handled every expected scenario successfully.
+
+**9. Cleaning variable names and adding comments**
+
+Finally, I used GPT again give Prompt
+> Improve code readability – converting variable names into meaningful names such as `total_allocation`, `post_crash_asset_value`, and similar descriptive variable names and `compute_risk_metrics` similar descriptive function name . and also add simple English comments and improve the overall code structure so that the project would look professional, understandable.
+
+**10. Completion of Task 1**
+
+In this way, I completed Task 1 – a fully functional portfolio risk calculator with proper logic verification, comprehensive edge‑case handling, clean code structure, professional terminal output, and strong implementation quality.
