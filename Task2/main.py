@@ -132,13 +132,18 @@ def main() -> int:
     # Fetch all asset prices
     results, fetch_timestamp = fetch_all_assets()
 
+    # Exit early if nothing succeeded
+    success_count = sum(1 for r in results if r.success)
+    if success_count == 0:
+        logger.critical("CRITICAL: No data from any source. Exiting.")
+        sys.exit(1)
+
     # Display results
     render_price_table(results, fetch_timestamp)
 
-    # Return exit code based on success/failure
+    # Return exit code: fail only if all assets failed
     failed_count = sum(1 for r in results if not r.success)
-
-    return 1 if failed_count > 0 else 0
+    return 1 if results and failed_count == len(results) else 0
 
 
 # Script entry point

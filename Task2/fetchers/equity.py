@@ -41,6 +41,10 @@ def _check_twelve_response(data: dict) -> None:
     code = data.get("code", 0)
     msg  = data.get("message", "unknown error")
 
+    if "apikey" in str(msg).lower():
+        logger.error("Twelve Data: invalid API key or key missing.")
+        raise ValueError("invalid API key")
+
     # Retryable errors
     if code == 429:
         raise TransientAPIError("rate limit reached")
@@ -64,6 +68,10 @@ def _check_alpha_response(data: dict) -> None:
     # Daily limit reached
     if "Information" in data:
         raise ValueError("daily API limit reached")
+
+    if "Error Message" in data or "error" in data:
+        logger.error("Alpha Vantage: invalid API key or request.")
+        raise ValueError("invalid API key")
 
     quote = data.get("Global Quote", {})
 
@@ -201,7 +209,7 @@ def fetch_equity(
             logger.warning(f"{name}: Twelve Data failed ({exc})")
 
     else:
-        logger.debug(f"{name}: Twelve Data skipped (no API key)")
+        logger.error(f"{name}: Twelve Data skipped (API key missing)")
 
     # Try Alpha Vantage next
     if price is None and ALPHA_API_KEY:
@@ -219,7 +227,7 @@ def fetch_equity(
             logger.warning(f"{name}: Alpha Vantage failed ({exc})")
 
     elif price is None:
-        logger.debug(f"{name}: Alpha Vantage skipped (no API key)")
+        logger.error(f"{name}: Alpha Vantage skipped (API key missing)")
 
     # Final fallback: yfinance
     if price is None:
@@ -246,6 +254,10 @@ def fetch_equity(
         )
 
     # Return failure result
+    logger.error(
+        "%s: all sources failed. Please try again after some time.",
+        name,
+    )
     return FetchResult(
         success=False,
         asset_name=name,

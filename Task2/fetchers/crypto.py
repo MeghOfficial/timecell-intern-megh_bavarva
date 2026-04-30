@@ -93,6 +93,10 @@ def _fetch_alpha_crypto(from_currency: str, to_currency: str) -> float:
     if "Information" in data:
         raise ValueError("Alpha Vantage daily limit reached")
 
+    if "Error Message" in data or "error" in data:
+        logger.error("Alpha Vantage: invalid API key or request.")
+        raise ValueError("invalid API key")
+
     rate_data = data.get("Realtime Currency Exchange Rate", {})
     rate = rate_data.get("5. Exchange Rate")
 
@@ -156,7 +160,7 @@ def fetch_crypto(
             )
 
     elif price is None:
-        logger.debug("Twelve Data skipped for %s — no API key.", name)
+        logger.error("Twelve Data skipped for %s — API key missing.", name)
 
     # Try Alpha Vantage if others fail and API key is available
     if price is None and ALPHA_API_KEY:
@@ -175,7 +179,7 @@ def fetch_crypto(
             )
 
     elif price is None:
-        logger.debug("Alpha Vantage skipped for %s — no API key.", name)
+        logger.error("Alpha Vantage skipped for %s — API key missing.", name)
 
     # Return success result
     if price is not None and source_used is not None:
@@ -193,6 +197,10 @@ def fetch_crypto(
         )
 
     # Return failure result
+    logger.error(
+        "%s: all sources failed. Please try again after some time.",
+        name,
+    )
     return FetchResult(
         success=False,
         asset_name=name,
