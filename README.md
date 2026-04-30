@@ -91,15 +91,12 @@ So I decided to implement a **fallback chain**:
 2. If that fails, **try Alpha Vantage**
 3. If both fail, **fall back to `yfinance`** (reliable but delayed by ~15 minutes for NSE stocks)
 
-### 4. Fallback Logic – Source Priority Justification
-
 I found this out from DeepSeek and Claude – they told me to use Twelve Data first as it gives near real-time data, then Alpha Vantage, and finally `yfinance` as it is delayed by nearly 10 to 15 minutes. This ensures the system always returns a price, even when one or two sources are down.
 
-### 5. Fallback Logic – Implementation & Integration
 
 I generated the code for this fallback logic using GPT, ran it in a test file, and then gave these files to Claude. I asked Claude to modify the previous code so that it implemented the fallback logic mentioned in my code.
 
-### 6. Strict Evaluation & Feedback
+### 4. Strict Evaluation & Feedback
 
 After that, I ran the code in the terminal and generated a strict evaluation prompt using GPT by giving this prompt:
 
@@ -108,9 +105,9 @@ After that, I ran the code in the terminal and generated a strict evaluation pro
 ChatGPT then gave me the best and strict prompt. After that, I used that prompt for GitCopilot as the evaluator, and the code file is already accessible.
 
 
-### 7. Fixing API Key Errors & Global Failure Handling
+### 5. Fixing API Key Errors & Global Failure Handling
 
-I pasted that error back to Claude and said:
+I pasted that error back to Claude and give these prompt using deepseek:
 
 > *"Fix this problem – when an API key is missing, wrong, or half‑written, don't show an error or bug. Instead, we have `yfinance` and crypto APIs that work without an API key, so use those in such scenarios.  
 > If every single asset fails (no price from any API for BTC, ETH, NIFTY50, RELIANCE – all of them), then log a critical error and exit the program.  
@@ -119,6 +116,6 @@ I pasted that error back to Claude and said:
 > - If at least one asset succeeded → show that data (put "N/A" for the failed ones)  
 > - If zero assets succeeded → log `"CRITICAL: No data from any source. Exiting."` and call `sys.exit(1)`"*
 
-### 8. Environment Variables & Security
+### 6. Environment Variables & Security
 
 I also added a `.env` file to the code instead of hardcoding keys, because pushing hardcoded keys would expose them. So I integrated `.env` properly. I used GPT to make  the code clean, has a proper structure, and outputs a well‑formatted table and also tell to add simple English comments so that by reading the function names, variable names, and comments, even a non‑technical person can understand what is going on.
