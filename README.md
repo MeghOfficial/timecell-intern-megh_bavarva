@@ -210,6 +210,8 @@ My prompt:
 
 > *"Use LangGraph as we need to implement a loop in this code. Make a second LLM2 (Gemini) that gives two things: accepted or rejected (using BaseModel) and a summary of feedback if rejected. Whatever we receive from LLM1, send it to LLM2 for validation. It should just give 'accepted' or 'rejected' plus a summary of feedback on what we need to improve if rejected. If rejected, send it back to LLM1 again with a summary of what to improve for better quality. LLM2 should use the risk_metric_calculator from Task‑1 for checking accuracy. Set a maximum of 3 iterations; if rejected 3 times, exit the loop because we have a limit on Gemini’s free API calls."*
 
-- I also noticed a problem: the output was generated but not visible for some time, and then suddenly the output appeared in the terminal. This is not good when building a UI based on it, so I implemented the streaming feature available in LangGraph using their official docs with the help of Copilot.
+- i Integrated LangSmith observability across LLM calls, automatically tracing token usage, latency, and cost per run for both the primary explanation and optional critique.used the @traceable decorator to monitor each function separately (prompt building, API call, parsing). it allowing us to see the exact input and output for every LLM callThis makes it easy to understand how the system is behaving at each step.
+
+- This observability is especially useful for future production deployment, as it helps identify which specific calls are taking more time or consuming more tokens. Based on these insights, we can optimize prompts, reduce cost, and improve performance.
 
 - I generated the evaluation prompt for Task‑3 using Claude, and used that prompt in Git Copilot but with a different model (Gemini 3.2 Pro) to get better evaluation. It gave a small change of 2, and I said to fix it that way. In this way, I finished these tasks.
