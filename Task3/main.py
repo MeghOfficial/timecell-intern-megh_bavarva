@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # If script is run directly, adjust path so relative imports work
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
-    __package__ = "Task3_1"
+    __package__ = "Task3"
 
 # Import models and main pipeline function
 from .models import CritiqueResult, PortfolioExplanation
@@ -102,7 +102,11 @@ def run_explainer(
     tone: Literal["beginner", "experienced", "expert"] = "beginner",
 ) -> None:
     # Call main pipeline function to generate explanation
-    explanation, critique, raw_text, errors = explain_portfolio(portfolio, tone=tone)
+    result = explain_portfolio(portfolio, tone=tone)
+    errors = result.get("errors", [])
+    explanation = result.get("structured_output")
+    critique = result.get("critique")
+    raw_text = result.get("raw_text")
 
     # If errors exist, print them and stop
     if errors:

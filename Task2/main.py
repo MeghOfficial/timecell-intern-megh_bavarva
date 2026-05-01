@@ -10,11 +10,9 @@ Responsible for:
 import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List
-
-import pytz
 
 # Allow running this file directly (fixes import path)
 if __package__ is None or __package__ == "":
@@ -22,8 +20,8 @@ if __package__ is None or __package__ == "":
     __package__ = "Task2"
 
 from .config import ASSETS_TO_FETCH
-from .display import console, render_price_table
-from .fetchers.base import FetchResult
+from .display import render_price_table
+from .fetchers.base import FetchResult, now_ist
 from .fetchers.crypto import fetch_crypto
 from .fetchers.equity import fetch_equity
 
@@ -38,12 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 # IST timezone setup
-IST = pytz.timezone("Asia/Kolkata")
-
-
-def now_ist() -> datetime:
-    """Return current time in IST."""
-    return datetime.now(tz=IST)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 # Decide which fetcher to use based on asset type
@@ -62,11 +55,16 @@ def _dispatch_fetch(asset: dict) -> FetchResult:
 
     # Equity assets (stocks, index)
     if asset["fetcher"] == "equity":
+        twelve_symbols = asset.get("twelve_symbols")
+        if not twelve_symbols:
+            twelve_symbol = asset.get("twelve_symbol")
+            twelve_symbols = [twelve_symbol] if twelve_symbol else []
         return fetch_equity(
             name=asset["name"],
             symbol_name=asset["symbol_name"],
             yf_symbol=asset["yf_symbol"],
-            twelve_symbol=asset["twelve_symbol"],
+            twelve_symbols=twelve_symbols,
+            alpha_symbol=asset.get("alpha_symbol"),
             currency=asset["currency"],
         )
 
@@ -125,9 +123,6 @@ def fetch_all_assets(
 
 # Main execution function
 def main() -> int:
-
-    # Print title line in terminal
-    console.rule("[bold cyan]TIMECELL — Live Market Data[/bold cyan]")
 
     # Fetch all asset prices
     results, fetch_timestamp = fetch_all_assets()

@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fingerprint + Inversion</title>
+    <style>
+      :root {
+        --bg: #05071A;
+        --surface: #0B0E22;
+        --surf2: #0E1228;
+        --border: rgba(240,165,0,0.13);
+        --border2: rgba(78,173,255,0.13);
+        --text: #E8E0D0;
+        --muted: rgba(232,224,208,0.4);
+        --accent: #F0A500;
+        --blue: #4EADFF;
+        --green: #4ADE80;
+        --red: #F87171;
+      }
+
+      * { box-sizing: border-box; }
+      html {
+        zoom: 1.5;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.5;
+        padding: 40px 20px;
+        background-image:
+          radial-gradient(circle at top left, rgba(240,165,0,0.10), transparent 28%),
+          radial-gradient(circle at top right, rgba(78,173,255,0.10), transparent 24%),
+          linear-gradient(180deg, rgba(255,255,255,0.02), transparent 24%);
+      }
+
+      #app {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+
+      .mono {
+        font-family: "Courier New", monospace;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .accent {
+        color: var(--accent);
+      }
+
+      .card {
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+
+      .card2 {
+        background: rgba(78,173,255,0.04);
+        border: 0.5px solid var(--border2);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .btn-primary {
+        padding: 12px 20px;
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        opacity: 0.8;
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      input[type="number"],
+      input[type="password"],
+      input[type="text"] {
+        padding: 8px 10px;
+        background: rgba(240,165,0,0.04);
+        border: 0.5px solid rgba(240,165,0,0.18);
+        border-radius: 6px;
+        color: var(--text);
+        font-family: monospace;
+        font-size: 13px;
+      }
+
+      h1 {
+        font-size: 40px;
+        font-weight: 500;
+        margin: 0 0 10px;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      .hero-card {
+        background: linear-gradient(180deg, rgba(11,14,34,0.95), rgba(11,14,34,0.72));
+        border: 1px solid rgba(240,165,0,0.12);
+        border-radius: 20px;
+        padding: 28px 28px 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.32);
+      }
+
+      .hero-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(240,165,0,0.18);
+        background: rgba(240,165,0,0.06);
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 16px;
+      }
+
+      h2 {
+        font-size: 22px;
+        margin: 0;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .fade-up {
+        animation: fadeUp 0.6s ease;
+      }
+
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script>
+      const ASSETS = [
+        { id: "equity_india", label: "Indian Equities", sub: "NIFTY / Smallcap / Midcap", color: "#E74C3C" },
+        { id: "equity_intl", label: "International Equities", sub: "Developed + Emerging", color: "#9B59B6" },
+        { id: "debt", label: "Bonds / Debentures", sub: "Medium-term fixed income", color: "#3498DB" },
+        { id: "fd", label: "Fixed Deposits", sub: "Bank / Corp FDs", color: "#2ECC71" },
+        { id: "nifty50", label: "NIFTY50 Index", sub: "Direct equity", color: "#F39C12" },
+        { id: "gold", label: "Gold", sub: "Physical + Digital", color: "#F1C40F" },
+        { id: "real_estate", label: "Real Estate", sub: "REITs / Direct", color: "#E67E22" },
+        { id: "cash", label: "Cash", sub: "Savings / Emergency", color: "#95A5A6" }
+      ];
+
+      const DIMS = [
+        { label: "Home\nBias", idx: 0 },
+        { label: "Safety\nSeeking", idx: 1 },
+        { label: "FOMO\nExposure", idx: 2 },
+        { label: "Diver-\nsification", idx: 3 },
+        { label: "Patience\nScore", idx: 4 },
+        { label: "Recency\nBias", idx: 5 }
+      ];
+
+      const app = document.getElementById("app");
+
+      const state = {
+        portfolio: {
+          equity_india: 30,
+          equity_intl: 10,
+          debt: 20,
+          fd: 10,
+          nifty50: 0,
+          gold: 20,
+          real_estate: 5,
+          cash: 5
+        },
+        apiKey: "",
+        fingerprint: null,
+        inversion: null,
+        loading1: false,
+        loading2: false,
+        error1: null,
+        error2: null,
+        horizon: 5,
+        liquidityYr: 3,
+        maxDD: 35,
+        oppCost: 6
+      };
+
+      const setAllocation = (assetId, value) => {
+        state.portfolio[assetId] = Math.max(0, Math.min(100, Number(value) || 0));
+        render();
+      };
+
+      const totalPct = () => {
+        return ASSETS.reduce((sum, a) => sum + (state.portfolio[a.id] || 0), 0);
+      };
+
+      const totalColor = () => {
+        const total = totalPct();
+        return total === 100 ? "var(--green)" : total < 100 ? "var(--accent)" : "var(--red)";
+      };
+
+      const radarSvg = (dataPts) => {
+        const cx = 100, cy = 100, rMax = 80;
+        const angleStep = (2 * Math.PI) / 6;
+
+        const poly = (pts) => pts.map(([x, y]) => `${x},${y}`).join(" ");
+
+        const grid = [15, 30, 45, 60, 75, 90].map(r => {
+          const pts = [];
+          for (let i = 0; i < 6; i++) {
+            const a = i * angleStep - Math.PI / 2;
+            pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+          }
+          return `<polygon points="${poly(pts)}" fill="none" stroke="rgba(240,165,0,0.08)" stroke-width="0.5" />`;
+        }).join("");
+
+        const lines = Array.from({ length: 6 }, (_, i) => {
+          const a = i * angleStep - Math.PI / 2;
+          const x2 = cx + rMax * Math.cos(a);
+          const y2 = cy + rMax * Math.sin(a);
+          return `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="rgba(240,165,0,0.1)" stroke-width="0.5" />`;
+        }).join("");
+
+        const dataPts_scaled = dataPts.map((val, i) => {
+          const a = i * angleStep - Math.PI / 2;
+          const r = (val / 100) * rMax;
+          return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+        });
+
+        const dots = dataPts_scaled.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3" fill="#F0A500" />`).join("");
+
+        const labels = DIMS.map((d, i) => {
+          const a = i * angleStep - Math.PI / 2;
+          const lx = cx + 100 * Math.cos(a);
+          const ly = cy + 100 * Math.sin(a);
+          return `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="rgba(232,224,208,0.45)" font-family="monospace">${d.label}</text>`;
+        }).join("");
+
+        return `
+          <svg width="200" height="200" style="overflow: visible">
+            ${grid}
+            ${lines}
+            <polygon points="${poly(dataPts_scaled)}" fill="rgba(240,165,0,0.11)" stroke="#F0A500" stroke-width="1.5" />
+            ${dots}
+            ${labels}
+          </svg>
+        `;
+      };
+
+      const allocBar = (label, data, labelColor) => {
+        const tot = ASSETS.reduce((s, a) => s + (data[a.id] || 0), 0);
+        if (tot === 0) return "";
+        const parts = ASSETS.map(a => {
+          const pct = (data[a.id] || 0) / tot * 100;
+          if (pct < 0.5) return "";
+          const text = pct > 6 ? `${Math.round(pct)}%` : "";
+          return `
+            <div title="${a.label}: ${Math.round(pct)}%" style="width:${pct}%; background:${a.color}; display:flex; align-items:center; justify-content:center; font-size:7px; color:#000b; font-weight:bold; transition:width 0.6s ease;">
+              ${text}
+            </div>
+          `;
+        }).join("");
+        return `
+          <div style="margin-bottom:14px">
+            <div class="mono" style="font-size:9px; letter-spacing:0.1em; color:${labelColor || "var(--muted)"}; text-transform:uppercase; margin-bottom:6px">${label}</div>
+            <div style="display:flex; height:18px; border-radius:3px; overflow:hidden; gap:1px">${parts}</div>
+          </div>
+        `;
+      };
+
+      const scoreMeter = (score) => {
+        const color = score >= 70 ? "var(--green)" : score >= 40 ? "var(--accent)" : "var(--red)";
+        return `
+          <div style="text-align:right; flex-shrink:0">
+            <div class="mono" style="font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:4px">Simple Money Score</div>
+            <div class="mono" style="font-size:44px; color:${color}; line-height:1">${score}</div>
+            <div class="mono" style="font-size:10px; color:var(--muted)">/100</div>
+          </div>
+        `;
+      };
+
+      const tripwire = (tw, idx) => {
+        const probColor = { low: "var(--green)", medium: "var(--accent)", high: "var(--red)" }[tw.probability] || "var(--muted)";
+        return `
+          <div class="card2" style="margin-bottom:10px; border-left:2px solid var(--red)">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+              <div style="display:flex; gap:8px; align-items:center">
+                <span class="mono" style="font-size:9px; color:var(--red); letter-spacing:0.12em">WARNING ${String(idx + 1).padStart(2, "0")}</span>
+                <span class="mono" style="font-size:9px; color:var(--muted); background:rgba(248,113,113,0.09); padding:2px 7px; border-radius:3px">${tw.asset}</span>
+              </div>
+              <span class="mono" style="font-size:9px; color:${probColor}">${(tw.probability || "").toUpperCase()} PROB</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:8px">
+              <span style="font-size:12.5px; color:var(--muted)">${tw.label}:</span>
+              <span class="mono" style="font-size:22px; color:var(--red); letter-spacing:-0.02em">${tw.threshold}</span>
+              <span class="mono" style="font-size:11px; color:var(--muted)">${tw.timeframe}</span>
+            </div>
+            <p style="font-size:12px; color:var(--muted); margin:0 0 10px; line-height:1.65">${tw.context}</p>
+            ${tw.watch_signal ? `
+              <div style="display:flex; align-items:center; gap:6px; padding:5px 10px; background:rgba(78,173,255,0.06); border:0.5px solid rgba(78,173,255,0.18); border-radius:4px">
+                <span style="color:var(--blue); font-size:9px; font-family:monospace; flex-shrink:0">◈ WATCH:</span>
+                <span style="color:var(--blue); font-size:11px; font-family:monospace">${tw.watch_signal}</span>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      };
+
+      const buildFingerprintPrompt = () => `You explain money habits to a complete beginner.
+Use very simple English. Use short sentences.
+Do not use finance jargon.
+If you can, use a real-life example.
+
+Portfolio:
+${ASSETS.map(a => `- ${a.label}: ${state.portfolio[a.id]}%`).join("\n")}
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "behavioral_type": "A very simple label like careful saver or all-in investor",
+  "behavioral_description": "Two very short sentences in simple English.",
+  "behavioral_score": <integer 0-100 where 100 = perfectly rational>,
+  "fingerprint": {
+    "home_bias": <0-100>,
+    "safety_seeking": <0-100>,
+    "fomo_exposure": <0-100>,
+    "diversification": <0-100>,
+    "patience_score": <0-100>,
+    "recency_bias": <0-100>
+  },
+  "ghost_portfolio": {
+    "equity_india": <number>,
+    "equity_intl": <number>,
+    "debt": <number>,
+    "fd": <number>,
+    "gold": <number>,
+    "real_estate": <number>,
+    "nifty50": <number>,
+    "cash": <number>
+  },
+  "return_drag": "X.X%",
+  "primary_shift": "<one short sentence saying what to move and why>",
+  "insights": [
+    "<short simple insight about lost money>",
+    "<short simple insight about the habit>",
+    "<short simple action to take next>"
+  ]
+}`;
+
+      const buildInversionPrompt = () => `You explain when a money decision stops making sense.
+Use very simple English. Use short sentences.
+Write like you are talking to a 15-year-old.
+
+CURRENT PORTFOLIO:
+${ASSETS.map(a => `- ${a.label}: ${state.portfolio[a.id]}%`).join("\n")}
+
+BEHAVIORAL PROFILE:
+- Investor type: ${state.fingerprint.behavioral_type}
+- Behavioral score: ${state.fingerprint.behavioral_score}/100
+- Annual return drag from biases: ${state.fingerprint.return_drag}
+- Primary recommended shift: ${state.fingerprint.primary_shift}
+
+GHOST PORTFOLIO (bias-corrected recommendation):
+${ASSETS.map(a => `- ${a.label}: ${state.fingerprint.ghost_portfolio[a.id]}%`).join("\n")}
+
+INVESTOR CONSTRAINTS:
+- Investment horizon: ${state.horizon} years
+- Liquidity needed by: Year ${Math.min(state.liquidityYr, state.horizon)}
+- Max acceptable drawdown: ${state.maxDD}%
+- Opportunity cost / FD rate: ${state.oppCost}% p.a.
+
+TASK: Find the exact warning points.
+Tell us when the suggested change becomes a bad idea.
+Use simple words.
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "decision_summary": "<one short sentence saying what decision is being tested>",
+  "tripwires": [
+    {
+      "label": "<simple warning name like price drop or cash need>",
+      "asset": "<which asset>",
+      "condition": "<falls more than / rises above / exceeds / drops below>",
+      "threshold": "<precise number with unit, e.g. -18.3% or 0.72>",
+      "timeframe": "<e.g. in years 1-2 / within 18 months>",
+      "context": "<why this matters in simple words — 1-2 short sentences>",
+      "probability": "<low / medium / high>",
+      "watch_signal": "<easy-to-see warning sign>"
+    }
+  ],
+  "confidence_level": <integer 0-100>,
+  "neutral_scenario": "<short simple sentence for when both choices are the same>",
+  "pre_mortem": "<two short sentences about how the choice could fail>",
+  "verdict": "<PROCEED / PROCEED WITH CAUTION / DO NOT PROCEED>",
+  "verdict_reasoning": "<one short simple sentence>"
+}`;
+
+      const callGroq = async (prompt, maxTokens) => {
+        const res = await fetch(
+          `https://api.groq.com/openai/v1/chat/completions`,
+          {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${state.apiKey}`
+            },
+            body: JSON.stringify({
+              model: "llama-3.3-70b-versatile",
+              messages: [{ role: "user", content: prompt }],
+              max_tokens: maxTokens,
+              temperature: 0.1
+            }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          const apiMessage = data?.error?.message || `HTTP ${res.status}`;
+          throw new Error(`Groq API error: ${apiMessage}`);
+        }
+
+        const text = data?.choices?.[0]?.message?.content || "";
+        if (!text || !text.trim()) {
+          console.error("Groq full response:", data);
+          throw new Error("Groq API returned empty output. Check console for details.");
+        }
+
+        return text;
+      };
+
+      const parseJsonFromText = (text) => {
+        const cleaned = text.replace(/```json|```/g, "").trim();
+        if (!cleaned) {
+          throw new Error("Gemini returned empty JSON output");
+        }
+        if (cleaned.startsWith("{") || cleaned.startsWith("[")) {
+          return JSON.parse(cleaned);
+        }
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          return JSON.parse(match[0]);
+        }
+        throw new Error("Gemini output is not valid JSON. Try again.");
+      };
+
+      const analyzeFingerprint = async () => {
+        if (!state.apiKey) {
+          state.error1 = "Please enter your Groq API key.";
+          render();
+          return;
+        }
+        state.loading1 = true;
+        state.error1 = null;
+        state.fingerprint = null;
+        state.inversion = null;
+        render();
+        try {
+          const prompt = buildFingerprintPrompt();
+          const text = await callGroq(prompt, 1000);
+          state.fingerprint = parseJsonFromText(text);
+        } catch (err) {
+          state.error1 = err?.message || "Analysis failed — please check your allocation and try again.";
+        } finally {
+          state.loading1 = false;
+          render();
+        }
+      };
+
+      const runInversion = async () => {
+        if (!state.fingerprint) return;
+        if (!state.apiKey) {
+          state.error2 = "Please enter your Groq API key.";
+          render();
+          return;
+        }
+        state.loading2 = true;
+        state.error2 = null;
+        state.inversion = null;
+        render();
+        try {
+          const prompt = buildInversionPrompt();
+          const text = await callGroq(prompt, 1200);
+          state.inversion = parseJsonFromText(text);
+        } catch (err) {
+          state.error2 = err?.message || "Inversion failed — please try again.";
+        } finally {
+          state.loading2 = false;
+          render();
+        }
+      };
+
+      const render = () => {
+        const total = totalPct();
+        const fingerprint = state.fingerprint;
+        const inversion = state.inversion;
+        const allocationReady = total === 100;
+
+        app.innerHTML = `
+          <div class="fade-up">
+            <div class="hero-card">
+              <div class="hero-kicker">timecell-AI-intelligence-system</div>
+              <h1>
+                Fingerprint Analyzer <span class="accent">+</span> Assumption Inversion Engine
+              </h1>
+              <p class="muted" style="font-size:15px; margin:0 0 18px; line-height:1.75; max-width:620px">
+                Step 1 shows your money habits and a calmer, smarter version of your portfolio.<br />
+                Step 2 checks the warning points where that advice stops being a good idea.
+              </p>
+              <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+                <div style="display:flex; align-items:center; gap:8px">
+                  <div style="width:20px; height:20px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:9px; color:var(--bg); font-family:monospace; font-weight:bold">1</div>
+                  <span class="mono" style="font-size:10px; color:var(--accent); letter-spacing:0.08em">Money Habit Check</span>
+                </div>
+                <span class="muted" style="font-size:14px; letter-spacing:2px">→</span>
+                <div style="display:flex; align-items:center; gap:8px">
+                  <div style="width:20px; height:20px; border-radius:50%; background:${fingerprint ? "var(--blue)" : "rgba(78,173,255,0.18)"}; display:flex; align-items:center; justify-content:center; font-size:9px; color:${fingerprint ? "var(--bg)" : "var(--blue)"}; font-family:monospace; font-weight:bold">2</div>
+                  <span class="mono" style="font-size:10px; color:${fingerprint ? "var(--blue)" : "rgba(78,173,255,0.45)"}; letter-spacing:0.08em">When This Breaks Check</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px">
+            <p class="mono accent" style="font-size:9px; letter-spacing:0.14em; text-transform:uppercase; margin:0 0 14px">API Key</p>
+            <div style="display:flex; gap:10px; align-items:center">
+              <input id="apiKey" type="password" placeholder="Groq API key (from console.groq.com)" value="${state.apiKey}" style="flex:1;" />
+              <span class="mono muted" style="font-size:10px">Stored only in memory</span>
+            </div>
+            <p class="mono muted" style="font-size:9px; margin-top:8px; line-height:1.6">Get free key: <a href="https://console.groq.com" target="_blank" style="color:var(--blue); text-decoration:none">console.groq.com</a></p>
+          </div>
+
+          <div class="card" style="margin-bottom:20px">
+            <p class="mono accent" style="font-size:9px; letter-spacing:0.14em; text-transform:uppercase; margin:0 0 14px">Phase 1 · Your Money Mix</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 36px">
+              ${ASSETS.map(a => `
+                <div style="display:flex; align-items:center; gap:10px">
+                  <div style="width:6px; height:6px; border-radius:50%; background:${a.color}; flex-shrink:0"></div>
+                  <div style="flex:1; min-width:0">
+                    <div style="font-size:12px">${a.label}</div>
+                    <div class="muted" style="font-size:10px">${a.sub}</div>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px; flex-shrink:0">
+                    <input data-asset="${a.id}" type="number" min="0" max="100" step="1" value="${state.portfolio[a.id]}" style="width:50px;" />
+                    <span class="mono muted" style="font-size:10px">%</span>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; padding-top:20px; border-top:0.5px solid var(--border)">
+              <div class="mono muted" style="font-size:10px">Total Allocation</div>
+              <div class="mono" style="font-size:18px; color:${totalColor()}">${total}%</div>
+            </div>
+            ${allocationReady ? "" : `
+              <div style="margin-top:10px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
+                Make your total allocation exactly 100% to run the analysis.
+              </div>
+            `}
+            <div style="margin-top:16px; display:flex; gap:12px; align-items:center; justify-content:space-between">
+              <button id="analyzeBtn" class="btn-primary" ${state.loading1 || !allocationReady ? "disabled" : ""}>${state.loading1 ? "Checking..." : "Find My Money Style"}</button>
+              <span class="muted" style="font-size:11px">${state.error1 || ""}</span>
+            </div>
+          </div>
+
+          ${fingerprint ? `
+            <div class="card" style="margin-bottom:20px">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px">
+                <div>
+                  <p class="mono muted" style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px">Money Habit Check</p>
+                  <h2>${fingerprint.behavioral_type}</h2>
+                  <p class="muted" style="font-size:13px; margin:0 0 12px; line-height:1.6">${fingerprint.behavioral_description}</p>
+                  ${allocBar("Portfolio Allocation", state.portfolio, "var(--muted)")}
+                  ${allocBar("Ghost Portfolio", fingerprint.ghost_portfolio, "var(--blue)")}
+                </div>
+                ${scoreMeter(fingerprint.behavioral_score)}
+              </div>
+              <div style="display:flex; gap:20px; align-items:flex-start; margin-top:20px">
+                ${radarSvg(Object.values(fingerprint.fingerprint))}
+                <div style="flex:1">
+                  <p class="mono muted" style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px">Simple Takeaways</p>
+                  <ul style="padding-left:18px; margin:0">
+                    ${fingerprint.insights.map(i => `<li style="font-size:12px; color:var(--muted); margin-bottom:6px">${i}</li>`).join("")}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ` : ""}
+
+          <div class="card" style="margin-bottom:20px">
+            <p class="mono" style="font-size:9px; letter-spacing:0.14em; color:var(--blue); text-transform:uppercase; margin:0 0 14px">Phase 2 · When This Breaks</p>
+              ${allocationReady ? "" : `
+                <div style="margin-bottom:12px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
+                  Make your total allocation exactly 100% to run this analysis.
+                </div>
+              `}
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px 24px">
+              <div>
+                <label class="mono muted" style="font-size:10px">How Long You Can Wait (years)</label>
+                <input id="horizon" type="range" min="1" max="20" value="${state.horizon}" />
+                <div class="mono" style="font-size:12px">${state.horizon} years</div>
+              </div>
+              <div>
+                <label class="mono muted" style="font-size:10px">When You May Need Cash (year)</label>
+                <input id="liquidityYr" type="range" min="1" max="20" value="${state.liquidityYr}" />
+                <div class="mono" style="font-size:12px">Year ${state.liquidityYr}</div>
+              </div>
+              <div>
+                <label class="mono muted" style="font-size:10px">Biggest Drop You Can Accept</label>
+                <input id="maxDD" type="range" min="5" max="80" value="${state.maxDD}" />
+                <div class="mono" style="font-size:12px">${state.maxDD}%</div>
+              </div>
+              <div>
+                <label class="mono muted" style="font-size:10px">Money You Could Earn Elsewhere</label>
+                <input id="oppCost" type="range" min="2" max="14" value="${state.oppCost}" />
+                <div class="mono" style="font-size:12px">${state.oppCost}%</div>
+              </div>
+            </div>
+            <div style="margin-top:16px; display:flex; gap:12px; align-items:center; justify-content:space-between">
+              <button id="invertBtn" class="btn-primary" ${state.loading2 || !fingerprint || !allocationReady ? "disabled" : ""}>${state.loading2 ? "Checking..." : "Find Warning Signs"}</button>
+              <span class="muted" style="font-size:11px">${state.error2 || (fingerprint ? "" : "Run Phase 1 first")}</span>
+            </div>
+          </div>
+
+          ${inversion ? `
+            <div class="card" style="margin-bottom:20px">
+              <p class="mono muted" style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px">Simple Verdict</p>
+              <h3>${inversion.decision_summary}</h3>
+              <p class="muted" style="font-size:13px; line-height:1.6; margin:0 0 16px">${inversion.neutral_scenario}</p>
+              <div class="card2" style="margin-bottom:12px">
+                <div class="mono" style="font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--red); margin-bottom:8px">Warning Signs</div>
+                ${inversion.tripwires.map((tw, i) => tripwire(tw, i)).join("")}
+              </div>
+              <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+                <span class="mono" style="font-size:10px; padding:4px 11px; background:rgba(78,173,255,0.08); border:0.5px solid rgba(78,173,255,0.25); border-radius:4px; color:var(--blue)">How Sure: ${inversion.confidence_level}/100</span>
+                <span class="mono" style="font-size:10px; padding:4px 11px; background:rgba(248,113,113,0.08); border:0.5px solid rgba(248,113,113,0.25); border-radius:4px; color:var(--red)">Go / Be Careful: ${inversion.verdict}</span>
+                <span class="mono" style="font-size:10px; padding:4px 11px; background:rgba(240,165,0,0.08); border:0.5px solid rgba(240,165,0,0.25); border-radius:4px; color:var(--accent)">${inversion.verdict_reasoning}</span>
+              </div>
+              <p class="muted" style="font-size:12px; line-height:1.6; margin-top:12px">${inversion.pre_mortem}</p>
+            </div>
+          ` : ""}
+        `;
+
+        app.querySelectorAll("input[data-asset]").forEach(input => {
+          input.addEventListener("input", (e) => setAllocation(e.target.dataset.asset, e.target.value));
+        });
+
+        const apiKeyInput = app.querySelector("#apiKey");
+        apiKeyInput.addEventListener("input", (e) => {
+          state.apiKey = e.target.value.trim();
+        });
+
+        const analyzeBtn = app.querySelector("#analyzeBtn");
+        analyzeBtn.addEventListener("click", analyzeFingerprint);
+
+        const invertBtn = app.querySelector("#invertBtn");
+        invertBtn.addEventListener("click", runInversion);
+
+        const horizon = app.querySelector("#horizon");
+        if (horizon) horizon.addEventListener("input", e => { state.horizon = Number(e.target.value); render(); });
+        const liquidityYr = app.querySelector("#liquidityYr");
+        if (liquidityYr) liquidityYr.addEventListener("input", e => { state.liquidityYr = Number(e.target.value); render(); });
+        const maxDD = app.querySelector("#maxDD");
+        if (maxDD) maxDD.addEventListener("input", e => { state.maxDD = Number(e.target.value); render(); });
+        const oppCost = app.querySelector("#oppCost");
+        if (oppCost) oppCost.addEventListener("input", e => { state.oppCost = Number(e.target.value); render(); });
+      };
+
+      render();
+    </script>
+  </body>
+</html>

@@ -47,15 +47,6 @@ ASSETS_TO_FETCH = [
         "alpha_to":      "USD",
         "currency":      "USD",
     },
-    {
-        "name":          "ETH",
-        "fetcher":       "crypto",
-        "coin_id":       "ethereum",
-        "twelve_symbol": "ETH/USD",
-        "alpha_from":    "ETH",
-        "alpha_to":      "USD",
-        "currency":      "USD",
-    },
 
     # Index (NSE)
     {
@@ -63,7 +54,13 @@ ASSETS_TO_FETCH = [
         "fetcher":        "equity",
         "symbol_name":    "NIFTY 50",
         "yf_symbol":      "^NSEI",
-        "twelve_symbol":  "NIFTY50:NSE",
+        "twelve_symbols": [
+            "NIFTY50:NSE",
+            "NIFTY 50",
+            "NIFTY_50",
+            "NIFTY50",
+        ],
+        "alpha_symbol":   None,
         "currency":       "INR",
     },
 
@@ -73,7 +70,12 @@ ASSETS_TO_FETCH = [
         "fetcher":        "equity",
         "symbol_name":    "RELIANCE",
         "yf_symbol":      "RELIANCE.NS",
-        "twelve_symbol":  "RELIANCE:NSE",
+        "twelve_symbols": [
+            "RELIANCE:NSE",
+            "RELIANCE.NS",
+            "RELIANCE",
+        ],
+        "alpha_symbol":   "RELIANCE.BSE",
         "currency":       "INR",
     },
 ]

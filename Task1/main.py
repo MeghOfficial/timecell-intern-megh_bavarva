@@ -9,13 +9,11 @@ Main file to run:
 import logging
 
 try:
-    from .risk_calculator import compute_risk_metrics
-    from .visualiser import render_full_report, console
+    from .risk_calculator import compute_risk_metrics, compute_risk_scenarios
+    from .visualiser import render_full_report
 except ImportError:
-    from risk_calculator import compute_risk_metrics
-    from visualiser import render_full_report, console
-
-from rich.rule import Rule
+    from risk_calculator import compute_risk_metrics, compute_risk_scenarios
+    from visualiser import render_full_report
 
 
 # show only warning logs
@@ -120,22 +118,18 @@ ALL_RISK_FREE_PORTFOLIO = {
 
 
 def run(portfolio_dict: dict, label: str) -> None:
-    #print portfolio title
-    console.print(Rule(f"[bold yellow]{label}[/bold yellow]"))
+    # print portfolio title
+    print(f"\n=== {label} ===")
 
-    #calculate risk metrics
+    # calculate risk metrics
     metrics = compute_risk_metrics(portfolio_dict)
+    scenarios = compute_risk_scenarios(portfolio_dict)
 
-    #if error exists, show error message
-    if "error" in metrics:
-        console.print(f"[bold red]Error: {metrics['error']}[/bold red]")
+    # show full report
+    render_full_report(metrics, portfolio_dict, scenarios=scenarios)
 
-    #otherwise show full report
-    else:
-        render_full_report(metrics)
-
-    #print empty line for clean output
-    console.print()
+    # print empty line for clean output
+    print()
 
 
 if __name__ == "__main__":

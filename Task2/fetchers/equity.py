@@ -184,7 +184,8 @@ def fetch_equity(
     name:          str,
     symbol_name:   str,
     yf_symbol:     str,
-    twelve_symbol: str,
+    twelve_symbols: list[str],
+    alpha_symbol:  str | None,
     currency:      str,
 ) -> FetchResult:
     """
@@ -196,24 +197,35 @@ def fetch_equity(
     source_used: str   | None = None
 
     # Try Twelve Data first (if API key exists)
-    if TWELVE_API_KEY:
-        try:
-            price = _with_retry(
-                fn=lambda: _fetch_twelve_equity(twelve_symbol),
-                asset_name=name,
-                provider="Twelve Data",
-            )
-            source_used = "Twelve Data"
+    if TWELVE_API_KEY and twelve_symbols:
+        for symbol in twelve_symbols:
+            try:
+                price = _with_retry(
+                    fn=lambda: _fetch_twelve_equity(symbol),
+                    asset_name=name,
+                    provider="Twelve Data",
+                )
+                source_used = "Twelve Data"
+                break
 
-        except Exception as exc:
-            logger.warning(f"{name}: Twelve Data failed ({exc})")
+            except Exception as exc:
+                logger.warning(
+                    "%s: Twelve Data failed for %s (%s)",
+                    name, symbol, exc,
+                )
 
     else:
-        logger.error(f"{name}: Twelve Data skipped (API key missing)")
+        if not TWELVE_API_KEY:
+            logger.error(f"{name}: Twelve Data skipped (API key missing)")
+        elif not twelve_symbols:
+            logger.error(f"{name}: Twelve Data skipped (no symbols provided)")
 
     # Try Alpha Vantage next
     if price is None and ALPHA_API_KEY:
-        av_symbol = yf_symbol.replace(".NS", "").replace("^", "")
+        if alpha_symbol:
+            av_symbol = alpha_symbol
+        else:
+            av_symbol = yf_symbol.replace(".NS", "").replace("^", "")
 
         try:
             price = _with_retry(

@@ -36,7 +36,6 @@ class ExplainerState(TypedDict, total=False):
     portfolio: dict
     tone: str
     metrics: dict
-    expected_verdict: str
     explanation: PortfolioExplanation
     critique: CritiqueResult
     raw_text: str
@@ -56,20 +55,18 @@ def _as_number(value: object) -> float | None:
 
 
 def _compute_verdict(portfolio: dict, metrics: dict) -> str:
-    severe = metrics.get("severe_crash", {})
-    runway_months = _as_number(severe.get("runway_months"))
+    runway_months = _as_number(metrics.get("runway_months"))
     assets = portfolio.get("assets", [])
 
-    has_concentration_risk = any(
+    has_extreme_crash = any(
         isinstance(asset, dict)
-        and asset.get("allocation_pct", 0) > 40
         and asset.get("expected_crash_pct", 0) < -50
         for asset in assets
     )
 
-    if runway_months is not None and runway_months < 24:
-        return "Aggressive"
-    if has_concentration_risk:
+    concentration_warning = bool(metrics.get("concentration_warning", False))
+
+    if has_extreme_crash or concentration_warning:
         return "Aggressive"
 
     all_assets_safe = all(
@@ -87,7 +84,7 @@ def _compute_verdict(portfolio: dict, metrics: dict) -> str:
 def explain_portfolio(
     portfolio: dict,
     tone: Literal["beginner", "experienced", "expert"] = "beginner",
-) -> tuple[PortfolioExplanation | None, CritiqueResult | None, str | None, list[str]]:
+) -> dict:
     
     # List to store errors
     errors: list[str] = []
@@ -109,16 +106,14 @@ def explain_portfolio(
     # Convert PortfolioExplanation schema into JSON text
     schema_text = json.dumps(PortfolioExplanation.model_json_schema(), indent=2)
 
-    expected_verdict = _compute_verdict(portfolio, metrics)
-
     def explainer_node(state: ExplainerState) -> ExplainerState:
         try:
             messages = build_explainer_messages(
                 portfolio=state["portfolio"],
                 tone=state["tone"],
                 schema_text=schema_text,
-                expected_verdict=state["expected_verdict"],
                 critic_feedback=state.get("critic_feedback"),
+                risk_metrics=state.get("metrics"),
             )
 
             raw_text, explanation = stream_json(
@@ -148,6 +143,7 @@ def explain_portfolio(
             )
             messages = build_critic_messages(
                 explanation=state["explanation"].model_dump(),
+                portfolio=state["portfolio"],
                 metrics=state["metrics"],
                 schema_text=critic_schema_text,
             )
@@ -215,15 +211,16 @@ def explain_portfolio(
         "portfolio": portfolio,
         "tone": tone,
         "metrics": metrics,
-        "expected_verdict": expected_verdict,
         "errors": errors,
         "revision": 0,
         "max_revisions": 3,
     })
 
-    return (
-        final_state.get("explanation"),
-        final_state.get("critique"),
-        final_state.get("raw_text"),
-        final_state.get("errors", []),
-    )
+    return {
+        "raw_text": final_state.get("raw_text"),
+        "structured_output": final_state.get("explanation"),
+        "critique": final_state.get("critique"),
+        "errors": final_state.get("errors", []),
+    }
+
+

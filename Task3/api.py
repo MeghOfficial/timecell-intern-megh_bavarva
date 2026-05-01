@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from .trace_utils import traceable
+
 
 def _get_client() -> genai.Client:
     # Get API key from environment variable
@@ -26,6 +28,7 @@ def _get_client() -> genai.Client:
     return genai.Client()
 
 
+@traceable(name="render_messages")
 def _render_messages(messages: list[BaseMessage]) -> str:
     # Convert list of messages into a single formatted string
     parts: list[str] = []
@@ -53,6 +56,11 @@ def _render_messages(messages: list[BaseMessage]) -> str:
     return "\n\n".join(parts)
 
 
+@traceable(name="parse_model_json")
+def _parse_model_json(raw_text: str, schema_model: Type[BaseModel]) -> BaseModel:
+    return schema_model.model_validate_json(raw_text)
+
+
 @retry(
     # Retry only if ValueError or ValidationError occurs
     retry=retry_if_exception_type((ValueError, ValidationError)),
@@ -66,6 +74,7 @@ def _render_messages(messages: list[BaseMessage]) -> str:
     # Raise final error if all retries fail
     reraise=True,
 )
+@traceable(name="generate_and_parse")
 def _generate_and_parse(
     client: genai.Client,
     prompt: str,
@@ -86,12 +95,13 @@ def _generate_and_parse(
         raise ValueError("LLM returned empty response")
 
     # Parse JSON output into Pydantic model
-    parsed = schema_model.model_validate_json(raw_text)
+    parsed = _parse_model_json(raw_text, schema_model)
 
     # Return both raw text and parsed object
     return raw_text, parsed
 
 
+@traceable(name="stream_json")
 def stream_json(
     messages: list[BaseMessage],
     schema_model: Type[BaseModel],

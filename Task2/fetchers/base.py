@@ -8,16 +8,14 @@ This avoids duplication and keeps code consistent.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime    import datetime
-from typing      import Optional
-
-import pytz
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # IST timezone used across the project
-IST = pytz.timezone("Asia/Kolkata")
+IST = timezone(timedelta(hours=5, minutes=30))
 
 def now_ist() -> datetime:
     """Return current time in IST timezone."""

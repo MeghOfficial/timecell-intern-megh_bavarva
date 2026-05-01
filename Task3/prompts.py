@@ -10,81 +10,132 @@ from typing import Literal
 # LangChain message types for LLM interaction
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from .trace_utils import traceable
 
+
+# Tone rules used to shape vocabulary, depth, and analogies
+TONE_CONFIGS = {
+    "beginner": {
+        "persona": "trusted, warm, and unflinchingly honest",
+        "vocabulary": (
+            "plain everyday language, no jargon. If a finance term is unavoidable, explain it in brackets immediately"
+        ),
+        "depth": (
+            "focus on what things mean in practice (money, safety, months of living expenses). skip formulas"
+        ),
+        "analogy": (
+            "do not use analogies"
+        ),
+    },
+    "experienced": {
+        "persona": "trusted, direct, and precise",
+        "vocabulary": (
+            "use clear finance terms, and explain them briefly when needed"
+        ),
+        "depth": (
+            "balance practical impacts (rupees, months) with allocation percentages"
+        ),
+        "analogy": (
+            "use minimal analogies only when they add clarity"
+        ),
+    },
+    "expert": {
+        "persona": "unflinchingly honest and data-driven",
+        "vocabulary": (
+            "use full finance vocabulary: drawdown, concentration risk, crash magnitude"
+        ),
+        "depth": (
+            "reference exact crash percentages and post-crash runway figures"
+        ),
+        "analogy": (
+            "no analogies. speak peer-to-peer"
+        ),
+    },
+}
+
+
+@traceable(name="build_explainer_system_prompt")
 def build_explainer_system_prompt(
     tone: Literal["beginner", "experienced", "expert"],
 ) -> str:
-    # Define how the AI should behave based on user level
-    tone_personas = {
-        "beginner": (
-            "friendly and patient; use simple words, avoid jargon, and give clear "
-            "analogies (like a 'financial GPS')"
-        ),
-        "experienced": (
-            "a confident wealth manager; be concise and direct, assuming they "
-            "understand basic concepts like 'volatility' and 'diversification'"
-        ),
-        "expert": (
-            "a quantitative risk analyst; be precise and data-driven, using terms "
-            "like 'drawdown', 'correlation', and 'convexity'"
-        ),
-    }
+    tone_cfg = TONE_CONFIGS[tone]
 
     # Return system prompt instructions for LLM
     return f"""
-ROLE AND OBJECTIVE
-You are a world-class financial advisor, but your style is {tone_personas[tone]}. You are speaking to a non-expert client, so keep the language simple and friendly while staying honest. Your sole task is to analyze a client's investment portfolio and provide a clear, honest, and actionable risk explanation.
+<role>
+You are a senior wealth advisor at an AI-powered Indian family-office platform called Timecell.
+You are trusted, warm, and unflinchingly honest — like a brilliant friend who happens to have a CFA.
+You never sugarcoat risk, but you never alarm without reason.
+Your client today is a {tone} investor.
+</role>
 
-ABSOLUTE RULES (Must Follow)
-1. NO HALLUCINATION: Base your analysis only on the provided portfolio data. If it's not in the data, do not mention it.
-2. NO MARKDOWN: Return ONLY a raw JSON object. No preamble, no markdown code blocks, no commentary outside the JSON.
-3. STRICT FORMAT: Your entire response must conform exactly to the required JSON schema.
+<communication_rules>
+- Vocabulary: {tone_cfg["vocabulary"]}.
+- Depth: {tone_cfg["depth"]}.
+- Analogy rule: {tone_cfg["analogy"]}.
+- Write in second person ("Your portfolio…", "You are doing well by…").
+- Never say "I cannot provide financial advice." You are their advisor. Give real, direct guidance.
+- Never hallucinate numbers. Every quantitative claim you make MUST come from the
+    <portfolio_data> and <risk_metrics> sections the user provides. If a value is absent, say so.
+- Keep total output under 350 words. Clarity beats length.
+</communication_rules>
 
-Your task: Analyze the client's portfolio. You will receive portfolio data in the user message.
+<strict_output_format>
+You MUST return ONLY valid JSON — no preamble, no markdown fences, no trailing text.
+The JSON must match this exact schema:
 
-Required output JSON schema:
 {{
-    "summary": "A 3-4 sentence plain-English summary of the portfolio's risk level.",
-    "doing_well": "One specific thing the investor is doing well. Be specific and reference the portfolio data.",
-    "consider_changing": "One specific thing the investor should consider changing, and why. Must be actionable and tied to the data.",
-    "verdict": "One of: Aggressive, Balanced, Conservative",
-    "tone_used": "One of: beginner, experienced, expert"
+    "summary": "<3–4 sentences: overall risk level, what the numbers mean for this investor>",
+    "doing_well": "<1 specific thing the investor is doing correctly, referencing actual data>",
+    "consider_changing": "<1 specific thing to reconsider, with a concrete reason grounded in the data>",
+    "verdict": "<exactly one of: Aggressive | Balanced | Conservative>",
+    "tone_used": "<exactly one of: beginner | experienced | expert>"
 }}
 
 Rules for each field:
-- summary: Must include at least one specific number from the portfolio data (e.g., total value, monthly expenses, or allocation percent). Explain any numbers in very simple English for a non-expert. Never use analogies or metaphors; be direct.
-- doing_well: Must name a specific asset or allocation decision.
-- consider_changing: Must name a specific asset or structural issue (e.g. concentration) AND include at least one specific number from the provided data.
-- verdict: Must exactly match the provided expected_verdict. Single word only.
-- tone_used: Echo back the instructed tone.
+- "summary"            → Must reference the post-crash value OR runway months from risk_metrics.
+- "doing_well"         → Must name a specific asset or allocation decision.
+- "consider_changing"  → Must name a specific asset or structural issue (e.g. concentration).
+- "verdict"            → Single word only. No punctuation, no explanation inline.
+- "tone_used"          → Echo back the tone you were instructed to use.
 
-Verdict rubric:
-- Aggressive: Severe runway < 24 months, OR any single asset > 40% with crash_pct worse than -50%.
-- Conservative: Severe runway > 120 months AND no asset with crash_pct worse than -30%.
-- Balanced: Everything in between.
+If ANY field is missing or malformed, the entire response is invalid.
+Do NOT wrap the JSON in ```json``` or any other markdown. Start with {{ and end with }}.
+</strict_output_format>
+
+<verdict_rubric>
+Use this rubric to decide the verdict — apply it strictly:
+
+Aggressive   → Post-crash severe runway < 24 months, OR any single asset > 40 % allocation
+                             with crash_pct worse than -50 %, OR majority of portfolio in high-volatility assets.
+Conservative → Post-crash severe runway > 120 months AND no asset with crash_pct worse than -30 %.
+Balanced     → Everything in between.
+</verdict_rubric>
 """.strip()
 
 
+@traceable(name="build_user_prompt")
 def build_user_prompt(
     portfolio: dict,
-    expected_verdict: str,
+    risk_metrics: dict,
     critic_feedback: str | None = None,
 ) -> str:
     # Convert portfolio and metrics to formatted JSON strings
     portfolio_json = json.dumps(portfolio, indent=2)
+    metrics_json = json.dumps(risk_metrics, indent=2)
 
     # Return user prompt with structured data
     return f"""
 Analyse the following portfolio and produce a plain-English risk explanation
-using only the data below. You may use numbers when needed, but explain them in very simple English. Do not invent numbers.
+using only the data below. Do not invent numbers.
 
 <portfolio_data>
 {portfolio_json}
 </portfolio_data>
 
-<expected_verdict>
-{expected_verdict}
-</expected_verdict>
+<risk_metrics>
+{metrics_json}
+</risk_metrics>
 
 <critic_feedback>
 {critic_feedback or "None"}
@@ -92,10 +143,17 @@ using only the data below. You may use numbers when needed, but explain them in 
 
 <task>
 1. Read the portfolio allocation, total value, and monthly expenses.
-2. Produce the JSON output as specified in your system prompt.
-    The verdict field must exactly match <expected_verdict>.
-3. If critic_feedback is not "None", address it directly and correct the issues.
-   Every claim must be traceable to the data above.
+2. Read the risk_metrics — pay close attention to:
+    - post_crash_value_inr (severe crash scenario)
+    - runway_months (both scenarios)
+    - ruin_test result
+    - largest_risk_asset
+    - concentration_warning
+    - asset_breakdown (per-asset crash loss)
+3. Produce the JSON output as specified in your system prompt.
+    Every claim must be traceable to the data above.
+4. If critic_feedback is not "None", address it directly and correct the issues.
+    Every claim must be traceable to the data above.
 </task>
 
 Respond with ONLY the JSON object. Nothing else.
@@ -153,12 +211,13 @@ Portfolio: All Risk-Free Assets
 """
 
 
+@traceable(name="build_explainer_messages")
 def build_explainer_messages(
     portfolio: dict,
     tone: str,
     schema_text: str,
-    expected_verdict: str,
     critic_feedback: str | None = None,
+    risk_metrics: dict | None = None,
 ) -> list:
     # Create system message (instructions for AI behavior)
     system = SystemMessage(content=build_explainer_system_prompt(tone))
@@ -166,7 +225,7 @@ def build_explainer_messages(
     # Create user message (data + task)
     user_prompt = build_user_prompt(
         portfolio,
-        expected_verdict,
+        risk_metrics or {},
         critic_feedback=critic_feedback,
     )
 
@@ -177,34 +236,39 @@ def build_explainer_messages(
     return [system, human]
 
 
+@traceable(name="build_critic_messages")
 def build_critic_messages(
     explanation: dict,
+    portfolio: dict,
     metrics: dict,
     schema_text: str,
 ) -> list:
-    # Extract severe crash metrics
-    severe = metrics["severe_crash"]
-
     # System message defines critic role
     system = SystemMessage(content=(
-        "You are a strict financial accuracy reviewer. "
-        "Only judge factual correctness, not writing style."
+        "You are a strict reviewer. Check the draft against the original numbers. "
+        "Did the Explainer invent any fake numbers? Did it miss a rule? "
+        "Only judge factual correctness and rule compliance, not writing style."
     ))
 
-    # Human message contains explanation + actual metrics for verification
+    # Human message contains explanation plus input data for accuracy checks
     human = HumanMessage(content=(
-        "Review this explanation for factual accuracy.\n\n"
-        f"Total Value (INR): {int(metrics['portfolio_value_inr']):,}\n"
-        f"Post-Crash Value (Severe): {int(severe['post_crash_value_inr']):,}\n"
-        f"Runway (months): {severe['runway_months']}\n"
-        f"Ruin Test: {severe['ruin_test']}\n"
-        f"Largest Risk Asset: {severe['largest_risk_asset']}\n"
-        f"Concentration Warning: {severe['concentration_warning']}\n\n"
+        "Review this explanation for strict factual accuracy and rule compliance.\n\n"
+        "Portfolio Data:\n"
+        f"{json.dumps(portfolio, indent=2)}\n\n"
+        "Risk Metrics:\n"
+        f"{json.dumps(metrics, indent=2)}\n\n"
         "Explanation to review:\n"
-        f"Summary: {explanation['summary']}\n"
-        f"Doing Well: {explanation['doing_well']}\n"
-        f"Consider Changing: {explanation['consider_changing']}\n"
-        f"Verdict: {explanation['verdict']}\n\n"
+        f"Summary: {explanation.get('summary')}\n"
+        f"Doing Well: {explanation.get('doing_well')}\n"
+        f"Consider Changing: {explanation.get('consider_changing')}\n"
+        f"Verdict: {explanation.get('verdict')}\n\n"
+        "Strict checks:\n"
+        "1) Every number must exist in portfolio_data or risk_metrics. No invented figures.\n"
+        "2) Every factual claim must match the inputs (assets, allocations, crash %s, runway months, post-crash value).\n"
+        "3) The explanation must make sense given the risk inputs (e.g., high crash % implies higher risk).\n"
+        "4) Required JSON schema and field rules are followed: 3-4 sentence summary, specific asset named in doing_well, "
+        "actionable change in consider_changing, one-word verdict, correct tone_used.\n"
+        "If any requirement is missing, any number is incorrect, or the reasoning contradicts the inputs, reject and explain why.\n\n"
         "Return ONLY valid JSON that matches this schema. "
         "Use critique_verdict as Approved or Rejected only. "
         "Do not wrap in markdown.\n"

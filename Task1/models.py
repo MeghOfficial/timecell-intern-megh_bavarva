@@ -33,9 +33,9 @@ class Portfolio:
     assets: List[Asset] = field(default_factory=list)
 
     def __post_init__(self):
-        # total portfolio value must be positive
-        if self.total_value_inr <= 0:
-            raise ValueError("Portfolio value must be positive")
+        # total portfolio value cannot be negative
+        if self.total_value_inr < 0:
+            raise ValueError("Portfolio value cannot be negative")
 
         # monthly expenses cannot be negative
         if self.monthly_expenses_inr < 0:
