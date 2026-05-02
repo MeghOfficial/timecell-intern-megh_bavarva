@@ -214,4 +214,4 @@ My prompt:
 
 - This observability is especially useful for future production deployment, as it helps identify which specific calls are taking more time or consuming more tokens. Based on these insights, we can optimize prompts, reduce cost, and improve performance.
 
-- I generated the evaluation prompt for Task‑3 using Claude, and used that prompt in Git Copilot but with a different model (Gemini 3.2 Pro) to get better evaluation. It gave a small change of 2, and I said to fix it that way. In this way, I finished these tasks.
+- I generated the evaluation prompt for Task‑3 using Claude, and used that prompt in Git Copilot but with a different model (Gemini 3.2 Pro) to get better evaluation. It gave a small change of 2, and I said to fix it. In this way, I finished these tasks.
