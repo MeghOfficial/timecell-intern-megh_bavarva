@@ -1,6 +1,6 @@
 # My Development Journey
 
-I uploaded a PDF containing all the prompts that were given to me by the LLM.
+I uploaded a PDF containing all the prompts that were used for thes Project.
 
 ## Task 1 – Portfolio Risk Calculator
 
