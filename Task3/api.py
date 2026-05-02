@@ -1,5 +1,5 @@
 """
-Gemini API wrapper (streaming + JSON parsing).
+Groq API wrapper (streaming + JSON parsing).
 """
 
 from __future__ import annotations
@@ -7,7 +7,8 @@ from __future__ import annotations
 import os
 from typing import Type
 
-from google import genai
+from dotenv import load_dotenv
+from groq import Groq
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 from pydantic import ValidationError
@@ -16,44 +17,40 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from .trace_utils import traceable
 
 
-def _get_client() -> genai.Client:
-    # Get API key from environment variable
-    api_key = os.getenv("GOOGLE_API_KEY")
-    
-    # If API key exists, create client using it
-    if api_key:
-        return genai.Client(api_key=api_key)
-    
-    # Otherwise create client without API key (default setup)
-    return genai.Client()
+load_dotenv()
+
+
+def _get_client() -> Groq:
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise ValueError("GROQ_API_KEY is missing")
+    return Groq(api_key=api_key)
 
 
 @traceable(name="render_messages")
-def _render_messages(messages: list[BaseMessage]) -> str:
-    # Convert list of messages into a single formatted string
-    parts: list[str] = []
+def _render_messages(messages: list[BaseMessage]) -> list[dict[str, str]]:
+    # Convert LangChain messages into Groq chat-completions payload
+    parts: list[dict[str, str]] = []
 
     for msg in messages:
-        # Get role (user, assistant, etc.), default = user
         role = getattr(msg, "type", "user")
+        if role == "human":
+            role = "user"
+        elif role not in {"system", "user", "assistant"}:
+            role = "user"
 
-        # Get message content
         content = msg.content
 
-        # If content is list, join only string parts
         if isinstance(content, list):
             content_text = "".join(
                 item for item in content if isinstance(item, str)
             )
         else:
-            # Convert content to string
             content_text = str(content)
 
-        # Add formatted message to parts
-        parts.append(f"{role.upper()}:\n{content_text}")
+        parts.append({"role": role, "content": content_text})
 
-    # Join all messages with spacing
-    return "\n\n".join(parts)
+    return parts
 
 
 @traceable(name="parse_model_json")
@@ -76,28 +73,37 @@ def _parse_model_json(raw_text: str, schema_model: Type[BaseModel]) -> BaseModel
 )
 @traceable(name="generate_and_parse")
 def _generate_and_parse(
-    client: genai.Client,
-    prompt: str,
+    client: Groq,
+    messages: list[dict[str, str]],
     schema_model: Type[BaseModel],
+    temperature: float,
 ) -> tuple[str, BaseModel]:
-    
-    # Call Gemini model to generate response
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=prompt,
+
+    model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+    # Stream the response from Groq and collect chunks into a single string
+    stream = client.chat.completions.create(
+        messages=messages,
+        model=model_name,
+        temperature=temperature,
+        max_completion_tokens=2048,
+        top_p=1,
+        stream=True,
     )
 
-    # Get text output from response
-    raw_text = response.text or ""
+    raw_parts: list[str] = []
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            raw_parts.append(delta)
 
-    # If response is empty, raise error to trigger retry
+    raw_text = "".join(raw_parts)
+
     if not raw_text.strip():
         raise ValueError("LLM returned empty response")
 
-    # Parse JSON output into Pydantic model
     parsed = _parse_model_json(raw_text, schema_model)
 
-    # Return both raw text and parsed object
     return raw_text, parsed
 
 
@@ -107,13 +113,18 @@ def stream_json(
     schema_model: Type[BaseModel],
     temperature: float,
 ) -> tuple[str, BaseModel]:
-    """Call Gemini output and parse JSON into Pydantic model."""
+    """Call Groq output and parse JSON into Pydantic model."""
 
-    # Create Gemini client
+    # Create Groq client
     client = _get_client()
 
-    # Convert messages into prompt string
-    prompt = _render_messages(messages)
+    # Convert messages into Groq chat-completions format
+    groq_messages = _render_messages(messages)
 
     # Generate response and parse it
-    return _generate_and_parse(client=client, prompt=prompt, schema_model=schema_model)
+    return _generate_and_parse(
+        client=client,
+        messages=groq_messages,
+        schema_model=schema_model,
+        temperature=temperature,
+    )

@@ -66,6 +66,8 @@ def _dispatch_fetch(asset: dict) -> FetchResult:
             twelve_symbols=twelve_symbols,
             alpha_symbol=asset.get("alpha_symbol"),
             currency=asset["currency"],
+            fcs_symbol=asset.get("fcs_symbol"),
+            nsepy_symbol=asset.get("nsepy_symbol"),
         )
 
     # Unknown type safety case
@@ -133,12 +135,11 @@ def main() -> int:
         logger.critical("CRITICAL: No data from any source. Exiting.")
         sys.exit(1)
 
-    # Display results
+    # Display results with mixed success/failure (N/A for failed assets)
     render_price_table(results, fetch_timestamp)
 
-    # Return exit code: fail only if all assets failed
-    failed_count = sum(1 for r in results if not r.success)
-    return 1 if results and failed_count == len(results) else 0
+    # Exit successfully: at least one asset succeeded
+    return 0
 
 
 # Script entry point

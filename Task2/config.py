@@ -18,6 +18,8 @@ load_dotenv()
 # If key is missing, that API will be skipped automatically
 TWELVE_API_KEY: str | None = os.getenv("TWELVE_API_KEY") or None
 ALPHA_API_KEY:  str | None = os.getenv("ALPHA_API_KEY")  or None
+FCS_PUBLIC_KEY: str | None = os.getenv("FCS_PUBLIC_KEY") or None
+FCS_API_KEY:    str | None = os.getenv("FCS_API_KEY") or None
 
 
 # Request settings
@@ -29,8 +31,12 @@ RETRY_WAIT_SECONDS      = 2
 
 # API endpoints
 TWELVE_BASE_URL    = "https://api.twelvedata.com/price"
+TWELVE_TIME_SERIES_URL = "https://api.twelvedata.com/time_series"
 ALPHA_BASE_URL     = "https://www.alphavantage.co/query"
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
+BINANCE_BASE_URL   = "https://api.binance.com/api/v3/ticker/price"
+COINCAP_BASE_URL   = "https://api.coincap.io/v2/assets"
+FCS_BASE_URL       = "https://fcsapi.com/api-v3/forex/latest"
 
 
 # List of assets to fetch
@@ -53,13 +59,10 @@ ASSETS_TO_FETCH = [
         "name":           "NIFTY50",
         "fetcher":        "equity",
         "symbol_name":    "NIFTY 50",
+        "fcs_symbol":     "NIFTY50",
+        "nsepy_symbol":   "NIFTY 50",
         "yf_symbol":      "^NSEI",
-        "twelve_symbols": [
-            "NIFTY50:NSE",
-            "NIFTY 50",
-            "NIFTY_50",
-            "NIFTY50",
-        ],
+        "twelve_symbols": [],
         "alpha_symbol":   None,
         "currency":       "INR",
     },
@@ -70,11 +73,8 @@ ASSETS_TO_FETCH = [
         "fetcher":        "equity",
         "symbol_name":    "RELIANCE",
         "yf_symbol":      "RELIANCE.NS",
-        "twelve_symbols": [
-            "RELIANCE:NSE",
-            "RELIANCE.NS",
-            "RELIANCE",
-        ],
+        "fcs_symbol":     "RELIANCE.BSE",
+        "twelve_symbols": [],
         "alpha_symbol":   "RELIANCE.BSE",
         "currency":       "INR",
     },

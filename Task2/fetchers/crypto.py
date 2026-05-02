@@ -1,10 +1,11 @@
 """
 Crypto fetcher using a fallback system.
 
-Tries 3 sources:
-1. CoinGecko (always used, no API key needed)
-2. Twelve Data (used only if API key is available)
-3. Alpha Vantage (used only if API key is available)
+Tries sources in order:
+1. Twelve Data (/price endpoint)
+2. CoinGecko (free, no API key)
+3. Binance (free, no API key)
+4. CoinCap (free, no API key)
 """
 
 from __future__ import annotations
@@ -22,9 +23,13 @@ from .equity import (
 from ..config import (
     ALPHA_API_KEY, ALPHA_BASE_URL,
     COINGECKO_BASE_URL,
+    BINANCE_BASE_URL,
+    COINCAP_BASE_URL,
     MAX_RETRY_ATTEMPTS, REQUEST_TIMEOUT_SECONDS, RETRY_WAIT_SECONDS,
     TWELVE_API_KEY, TWELVE_BASE_URL,
 )
+
+from ..config import TWELVE_TIME_SERIES_URL
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +61,52 @@ def _fetch_coingecko(coin_id: str, vs_currency: str) -> float:
     return float(price)
 
 
+# Fetch price from Binance (no API key needed for public ticker)
+def _fetch_binance(symbol: str = "BTCUSDT") -> float:
+    response = SESSION.get(
+        BINANCE_BASE_URL,
+        params={"symbol": symbol},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    if "price" not in data:
+        raise ValueError(f"Binance: no price for '{symbol}'")
+
+    price = float(data["price"])
+
+    # Avoid invalid zero price
+    if price == 0.0:
+        raise ValueError(f"Binance: zero price for '{symbol}'")
+
+    return price
+
+
+# Fetch price from CoinCap (no API key needed)
+def _fetch_coincap(coin_id: str = "bitcoin") -> float:
+    response = SESSION.get(
+        f"{COINCAP_BASE_URL}/{coin_id}",
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    if "data" not in data or "priceUsd" not in data.get("data", {}):
+        raise ValueError(f"CoinCap: no price for '{coin_id}'")
+
+    price = float(data["data"]["priceUsd"])
+
+    # Avoid invalid zero price
+    if price == 0.0:
+        raise ValueError(f"CoinCap: zero price for '{coin_id}'")
+
+    return price
+
+
 # Fetch price from Twelve Data
 def _fetch_twelve_crypto(twelve_symbol: str) -> float:
+    # Use the simple price endpoint first for BTC and other cryptos
     response = SESSION.get(
         TWELVE_BASE_URL,
         params={"symbol": twelve_symbol, "apikey": TWELVE_API_KEY},
@@ -65,11 +114,28 @@ def _fetch_twelve_crypto(twelve_symbol: str) -> float:
     )
     response.raise_for_status()
     data = response.json()
-
-    # Validate response using shared function
     _check_twelve_response(data)
 
-    return float(data["price"])
+    if "price" in data:
+        logger.info("✓ %s via Twelve Data (price): %s", twelve_symbol, data["price"])
+        return float(data["price"])
+
+    # If price key is not returned, try time_series as a fallback
+    response = SESSION.get(
+        TWELVE_TIME_SERIES_URL,
+        params={"symbol": twelve_symbol, "interval": "1min", "outputsize": 1, "apikey": TWELVE_API_KEY},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if isinstance(data, dict) and "values" in data and data.get("values"):
+        latest = data["values"][0]
+        close = latest.get("close")
+        if close is not None:
+            logger.info("✓ %s via Twelve Data (time_series close): %s", twelve_symbol, close)
+            return float(close)
+
+    raise ValueError(f"Twelve Data: no price for '{twelve_symbol}'")
 
 
 # Fetch price from Alpha Vantage
@@ -120,30 +186,19 @@ def fetch_crypto(
 ) -> FetchResult:
     """
     Fetch crypto price using fallback approach.
-    Tries multiple APIs until one succeeds.
+    Tries sources in order until one succeeds:
+    1. Twelve Data
+    2. CoinGecko
+    3. Binance
+    4. CoinCap
     """
 
     vs_currency  = currency.lower()
     price:       float | None = None
     source_used: str   | None = None
 
-    # Try CoinGecko first (most reliable and free)
-    try:
-        price = _with_retry(
-            fn=lambda: _fetch_coingecko(coin_id, vs_currency),
-            asset_name=name,
-            provider="CoinGecko",
-        )
-        source_used = "CoinGecko"
-        logger.info("✓ %s via CoinGecko: %.2f %s", name, price, currency)
-
-    except Exception as exc:
-        logger.warning(
-            "✗ %s — CoinGecko failed (%s). Trying Twelve Data...", name, exc,
-        )
-
-    # Try Twelve Data if CoinGecko fails and API key is available
-    if price is None and TWELVE_API_KEY:
+    # Try Twelve Data first
+    if TWELVE_API_KEY:
         try:
             price = _with_retry(
                 fn=lambda: _fetch_twelve_crypto(twelve_symbol),
@@ -152,34 +207,53 @@ def fetch_crypto(
             )
             source_used = "Twelve Data"
             logger.info("✓ %s via Twelve Data: %.2f %s", name, price, currency)
-
         except Exception as exc:
-            logger.warning(
-                "✗ %s — Twelve Data failed (%s). Trying Alpha Vantage...",
-                name, exc,
-            )
+            msg = str(exc).lower()
+            if "invalid symbol" in msg or "invalid symbol" in repr(exc).lower():
+                logger.warning("%s: Twelve Data invalid symbol: %s", name, twelve_symbol)
+            else:
+                logger.warning("✗ %s — Twelve Data failed (%s). Trying CoinGecko...", name, exc)
+    else:
+        logger.debug("Twelve Data skipped for %s (API key missing). Trying CoinGecko...", name)
 
-    elif price is None:
-        logger.error("Twelve Data skipped for %s — API key missing.", name)
-
-    # Try Alpha Vantage if others fail and API key is available
-    if price is None and ALPHA_API_KEY:
+    # Try CoinGecko next
+    if price is None:
         try:
             price = _with_retry(
-                fn=lambda: _fetch_alpha_crypto(alpha_from, alpha_to),
+                fn=lambda: _fetch_coingecko(coin_id, vs_currency),
                 asset_name=name,
-                provider="Alpha Vantage",
+                provider="CoinGecko",
             )
-            source_used = "Alpha Vantage"
-            logger.info("✓ %s via Alpha Vantage: %.2f %s", name, price, currency)
-
+            source_used = "CoinGecko"
+            logger.info("✓ %s via CoinGecko: %.2f %s", name, price, currency)
         except Exception as exc:
-            logger.error(
-                "✗ %s — all sources failed. Last error: %s", name, exc,
-            )
+            logger.warning("✗ %s — CoinGecko failed (%s). Trying Binance...", name, exc)
 
-    elif price is None:
-        logger.error("Alpha Vantage skipped for %s — API key missing.", name)
+    # Try Binance next
+    if price is None:
+        try:
+            price = _with_retry(
+                fn=lambda: _fetch_binance(f"{coin_id.upper()}USD" if coin_id == "bitcoin" else f"{coin_id.upper()}USD"),
+                asset_name=name,
+                provider="Binance",
+            )
+            source_used = "Binance"
+            logger.info("✓ %s via Binance: %.2f %s", name, price, currency)
+        except Exception as exc:
+            logger.warning("✗ %s — Binance failed (%s). Trying CoinCap...", name, exc)
+
+    # Final fallback: CoinCap
+    if price is None:
+        try:
+            price = _with_retry(
+                fn=lambda: _fetch_coincap(coin_id),
+                asset_name=name,
+                provider="CoinCap",
+            )
+            source_used = "CoinCap"
+            logger.info("✓ %s via CoinCap: %.2f %s", name, price, currency)
+        except Exception as exc:
+            logger.error("✗ %s — all sources failed. Last error: %s", name, exc)
 
     # Return success result
     if price is not None and source_used is not None:
@@ -204,5 +278,5 @@ def fetch_crypto(
     return FetchResult(
         success=False,
         asset_name=name,
-        error=f"CoinGecko, Twelve Data, Alpha Vantage all failed for {name}",
+        error=f"Twelve Data, CoinGecko, Binance, CoinCap all failed for {name}",
     )

@@ -21,6 +21,7 @@
 
       * { box-sizing: border-box; }
       html {
+        font-size: 16px;
         zoom: 1.5;
       }
       body {
@@ -29,7 +30,7 @@
         color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         line-height: 1.5;
-        padding: 40px 20px;
+        padding: 2.5rem 1.25rem;
         background-image:
           radial-gradient(circle at top left, rgba(240,165,0,0.10), transparent 28%),
           radial-gradient(circle at top right, rgba(78,173,255,0.10), transparent 24%),
@@ -37,7 +38,7 @@
       }
 
       #app {
-        max-width: 960px;
+        max-width: 60rem;
         margin: 0 auto;
       }
 
@@ -56,26 +57,26 @@
       .card {
         background: var(--surface);
         border: 0.5px solid var(--border);
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 16px;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
       }
 
       .card2 {
         background: rgba(78,173,255,0.04);
         border: 0.5px solid var(--border2);
-        border-radius: 8px;
-        padding: 16px;
+        border-radius: 0.5rem;
+        padding: 1rem;
       }
 
       .btn-primary {
-        padding: 12px 20px;
+        padding: 0.75rem 1.25rem;
         background: var(--accent);
         color: var(--bg);
         border: none;
-        border-radius: 6px;
+        border-radius: 0.375rem;
         font-family: monospace;
-        font-size: 11px;
+        font-size: 0.6875rem;
         letter-spacing: 0.14em;
         text-transform: uppercase;
         cursor: pointer;
@@ -99,13 +100,52 @@
       input[type="number"],
       input[type="password"],
       input[type="text"] {
-        padding: 8px 10px;
+        padding: 0.5rem 0.625rem;
         background: rgba(240,165,0,0.04);
         border: 0.5px solid rgba(240,165,0,0.18);
-        border-radius: 6px;
+        border-radius: 0.375rem;
         color: var(--text);
         font-family: monospace;
-        font-size: 13px;
+        font-size: 0.8125rem;
+      }
+
+      .alloc-grid,
+      .phase2-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem 1.5rem;
+      }
+
+      .alloc-row {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+      }
+
+      .action-row {
+        margin-top: 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .fingerprint-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .fingerprint-bottom {
+        display: flex;
+        gap: 1.25rem;
+        align-items: flex-start;
+        margin-top: 1.25rem;
+      }
+
+      .alloc-input {
+        width: 3.25rem;
       }
 
       h1 {
@@ -161,6 +201,47 @@
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
+
+      @media (max-width: 56rem) {
+        html {
+          zoom: 1;
+        }
+
+        body {
+          padding: 1.25rem 0.75rem;
+        }
+
+        h1 {
+          font-size: 2rem;
+          line-height: 1.1;
+        }
+
+        .hero-card {
+          padding: 1rem;
+        }
+
+        .alloc-grid,
+        .phase2-grid {
+          grid-template-columns: 1fr;
+          gap: 0.75rem;
+        }
+
+        .fingerprint-top,
+        .fingerprint-bottom {
+          flex-direction: column;
+        }
+      }
+
+      @media (max-width: 40rem) {
+        .action-row {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .btn-primary {
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>
@@ -213,9 +294,9 @@
         oppCost: 6
       };
 
-      const setAllocation = (assetId, value) => {
+      const setAllocation = (assetId, value, shouldRender = true) => {
         state.portfolio[assetId] = Math.max(0, Math.min(100, Number(value) || 0));
-        render();
+        if (shouldRender) render();
       };
 
       const totalPct = () => {
@@ -225,6 +306,76 @@
       const totalColor = () => {
         const total = totalPct();
         return total === 100 ? "var(--green)" : total < 100 ? "var(--accent)" : "var(--red)";
+      };
+
+      const updateAllocationMeta = () => {
+        const total = totalPct();
+        const allocationReady = total === 100;
+
+        const totalEl = app.querySelector("#totalPctValue");
+        if (totalEl) {
+          totalEl.textContent = `${total}%`;
+          totalEl.style.color = totalColor();
+        }
+
+        const allocWarning = app.querySelector("#allocWarning");
+        if (allocWarning) allocWarning.style.display = allocationReady ? "none" : "block";
+
+        const phase2Warning = app.querySelector("#phase2Warning");
+        if (phase2Warning) phase2Warning.style.display = allocationReady ? "none" : "block";
+
+        const analyzeBtn = app.querySelector("#analyzeBtn");
+        if (analyzeBtn) analyzeBtn.disabled = state.loading1 || !allocationReady;
+
+        const invertBtn = app.querySelector("#invertBtn");
+        if (invertBtn) invertBtn.disabled = state.loading2 || !state.fingerprint || !allocationReady;
+      };
+
+      const captureUiState = () => {
+        const snapshot = {
+          scrollY: window.scrollY,
+          focusType: null,
+          focusKey: null,
+          selectionStart: null,
+          selectionEnd: null,
+        };
+
+        const active = document.activeElement;
+        if (!active || !app.contains(active)) return snapshot;
+
+        if (active.id) {
+          snapshot.focusType = "id";
+          snapshot.focusKey = active.id;
+        } else if (active.dataset?.asset) {
+          snapshot.focusType = "asset";
+          snapshot.focusKey = active.dataset.asset;
+        }
+
+        if (typeof active.selectionStart === "number") snapshot.selectionStart = active.selectionStart;
+        if (typeof active.selectionEnd === "number") snapshot.selectionEnd = active.selectionEnd;
+
+        return snapshot;
+      };
+
+      const restoreUiState = (snapshot) => {
+        if (!snapshot) return;
+
+        window.scrollTo({ top: snapshot.scrollY });
+
+        let el = null;
+        if (snapshot.focusType === "id" && snapshot.focusKey) {
+          el = app.querySelector(`#${snapshot.focusKey}`);
+        }
+        if (snapshot.focusType === "asset" && snapshot.focusKey) {
+          el = app.querySelector(`input[data-asset=\"${snapshot.focusKey}\"]`);
+        }
+
+        if (el) {
+          el.focus({ preventScroll: true });
+          if (typeof snapshot.selectionStart === "number" && typeof snapshot.selectionEnd === "number" && typeof el.setSelectionRange === "function") {
+            el.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+          }
+        }
       };
 
       const radarSvg = (dataPts) => {
@@ -518,6 +669,7 @@ Return ONLY valid JSON (no markdown, no backticks):
       };
 
       const render = () => {
+        const uiSnapshot = captureUiState();
         const total = totalPct();
         const fingerprint = state.fingerprint;
         const inversion = state.inversion;
@@ -559,16 +711,16 @@ Return ONLY valid JSON (no markdown, no backticks):
 
           <div class="card" style="margin-bottom:20px">
             <p class="mono accent" style="font-size:9px; letter-spacing:0.14em; text-transform:uppercase; margin:0 0 14px">Phase 1 · Your Money Mix</p>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 36px">
+            <div class="alloc-grid" style="gap:10px 36px">
               ${ASSETS.map(a => `
-                <div style="display:flex; align-items:center; gap:10px">
+                <div class="alloc-row">
                   <div style="width:6px; height:6px; border-radius:50%; background:${a.color}; flex-shrink:0"></div>
                   <div style="flex:1; min-width:0">
                     <div style="font-size:12px">${a.label}</div>
                     <div class="muted" style="font-size:10px">${a.sub}</div>
                   </div>
                   <div style="display:flex; align-items:center; gap:4px; flex-shrink:0">
-                    <input data-asset="${a.id}" type="number" min="0" max="100" step="1" value="${state.portfolio[a.id]}" style="width:50px;" />
+                    <input data-asset="${a.id}" class="alloc-input" type="number" min="0" max="100" step="1" value="${state.portfolio[a.id]}" />
                     <span class="mono muted" style="font-size:10px">%</span>
                   </div>
                 </div>
@@ -576,14 +728,12 @@ Return ONLY valid JSON (no markdown, no backticks):
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; padding-top:20px; border-top:0.5px solid var(--border)">
               <div class="mono muted" style="font-size:10px">Total Allocation</div>
-              <div class="mono" style="font-size:18px; color:${totalColor()}">${total}%</div>
+              <div id="totalPctValue" class="mono" style="font-size:18px; color:${totalColor()}">${total}%</div>
             </div>
-            ${allocationReady ? "" : `
-              <div style="margin-top:10px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
+            <div id="allocWarning" style="display:${allocationReady ? "none" : "block"}; margin-top:10px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
                 Make your total allocation exactly 100% to run the analysis.
-              </div>
-            `}
-            <div style="margin-top:16px; display:flex; gap:12px; align-items:center; justify-content:space-between">
+            </div>
+            <div class="action-row">
               <button id="analyzeBtn" class="btn-primary" ${state.loading1 || !allocationReady ? "disabled" : ""}>${state.loading1 ? "Checking..." : "Find My Money Style"}</button>
               <span class="muted" style="font-size:11px">${state.error1 || ""}</span>
             </div>
@@ -591,7 +741,7 @@ Return ONLY valid JSON (no markdown, no backticks):
 
           ${fingerprint ? `
             <div class="card" style="margin-bottom:20px">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px">
+              <div class="fingerprint-top">
                 <div>
                   <p class="mono muted" style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px">Money Habit Check</p>
                   <h2>${fingerprint.behavioral_type}</h2>
@@ -601,7 +751,7 @@ Return ONLY valid JSON (no markdown, no backticks):
                 </div>
                 ${scoreMeter(fingerprint.behavioral_score)}
               </div>
-              <div style="display:flex; gap:20px; align-items:flex-start; margin-top:20px">
+              <div class="fingerprint-bottom">
                 ${radarSvg(Object.values(fingerprint.fingerprint))}
                 <div style="flex:1">
                   <p class="mono muted" style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; margin:0 0 8px">Simple Takeaways</p>
@@ -615,12 +765,10 @@ Return ONLY valid JSON (no markdown, no backticks):
 
           <div class="card" style="margin-bottom:20px">
             <p class="mono" style="font-size:9px; letter-spacing:0.14em; color:var(--blue); text-transform:uppercase; margin:0 0 14px">Phase 2 · When This Breaks</p>
-              ${allocationReady ? "" : `
-                <div style="margin-bottom:12px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
+              <div id="phase2Warning" style="display:${allocationReady ? "none" : "block"}; margin-bottom:12px; padding:10px 12px; border-radius:6px; border:0.5px solid rgba(248,113,113,0.25); background:rgba(248,113,113,0.06); color:var(--red); font-size:11px; line-height:1.6">
                   Make your total allocation exactly 100% to run this analysis.
                 </div>
-              `}
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px 24px">
+            <div class="phase2-grid" style="gap:12px 24px">
               <div>
                 <label class="mono muted" style="font-size:10px">How Long You Can Wait (years)</label>
                 <input id="horizon" type="range" min="1" max="20" value="${state.horizon}" />
@@ -642,7 +790,7 @@ Return ONLY valid JSON (no markdown, no backticks):
                 <div class="mono" style="font-size:12px">${state.oppCost}%</div>
               </div>
             </div>
-            <div style="margin-top:16px; display:flex; gap:12px; align-items:center; justify-content:space-between">
+            <div class="action-row">
               <button id="invertBtn" class="btn-primary" ${state.loading2 || !fingerprint || !allocationReady ? "disabled" : ""}>${state.loading2 ? "Checking..." : "Find Warning Signs"}</button>
               <span class="muted" style="font-size:11px">${state.error2 || (fingerprint ? "" : "Run Phase 1 first")}</span>
             </div>
@@ -668,7 +816,14 @@ Return ONLY valid JSON (no markdown, no backticks):
         `;
 
         app.querySelectorAll("input[data-asset]").forEach(input => {
-          input.addEventListener("input", (e) => setAllocation(e.target.dataset.asset, e.target.value));
+          input.addEventListener("input", (e) => {
+            setAllocation(e.target.dataset.asset, e.target.value, false);
+            updateAllocationMeta();
+          });
+          input.addEventListener("change", (e) => setAllocation(e.target.dataset.asset, e.target.value, true));
+          input.addEventListener("wheel", (e) => {
+            e.target.blur();
+          });
         });
 
         const apiKeyInput = app.querySelector("#apiKey");
@@ -690,6 +845,8 @@ Return ONLY valid JSON (no markdown, no backticks):
         if (maxDD) maxDD.addEventListener("input", e => { state.maxDD = Number(e.target.value); render(); });
         const oppCost = app.querySelector("#oppCost");
         if (oppCost) oppCost.addEventListener("input", e => { state.oppCost = Number(e.target.value); render(); });
+
+        restoreUiState(uiSnapshot);
       };
 
       render();

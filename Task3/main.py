@@ -35,17 +35,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Example portfolio data for testing
-EXAMPLE_PORTFOLIO = {
-    "total_value_inr": 10_000_000,
-    "monthly_expenses_inr": 80_000,
-    "assets": [
-        {"name": "BTC", "allocation_pct": 30, "expected_crash_pct": -80},
-        {"name": "NIFTY50", "allocation_pct": 40, "expected_crash_pct": -40},
-        {"name": "GOLD", "allocation_pct": 20, "expected_crash_pct": -15},
-        {"name": "CASH", "allocation_pct": 10, "expected_crash_pct": 0},
-    ],
-}
+# Example portfolios for testing
+EXAMPLE_PORTFOLIOS = [
+    {
+        "label": "Example 1 ",
+        "tone": "beginner",
+        "portfolio": {
+            "total_value_inr": 5_000_000,
+            "monthly_expenses_inr": 60_000,
+            "assets": [
+                {"name": "CASH", "allocation_pct": 70, "expected_crash_pct": 0},
+                {"name": "GOLD", "allocation_pct": 20, "expected_crash_pct": -15},
+                {"name": "NIFTY50", "allocation_pct": 10, "expected_crash_pct": -40},
+            ],
+        },
+    },
+    {
+        "label": "Example 2",
+        "tone": "experienced",
+        "portfolio": {
+            "total_value_inr": 10_000_000,
+            "monthly_expenses_inr": 80_000,
+            "assets": [
+                {"name": "BTC", "allocation_pct": 45, "expected_crash_pct": -80},
+                {"name": "NIFTY50", "allocation_pct": 35, "expected_crash_pct": -40},
+                {"name": "GOLD", "allocation_pct": 10, "expected_crash_pct": -15},
+                {"name": "CASH", "allocation_pct": 10, "expected_crash_pct": 0},
+            ],
+        },
+    },
+]
 
 
 def render_explanation(
@@ -53,14 +72,20 @@ def render_explanation(
     critique: CritiqueResult | None,
     tone: str,
     raw_text: str | None,
+    critic_raw_texts: list[str] | None,
 ) -> None:
     # Print selected tone
     print(f"\nTone: {tone}")
 
     # Print raw LLM output if available
     if raw_text:
-        print("\nRaw LLM response:")
+        print("\nLLM1 output:")
         print(raw_text)
+
+    if critic_raw_texts:
+        for index, critic_raw_text in enumerate(critic_raw_texts, start=1):
+            print(f"\nLLM2 output attempt {index}:")
+            print(critic_raw_text)
 
     # Print parsed structured output
     print("\nParsed output:")
@@ -100,6 +125,7 @@ def render_explanation(
 def run_explainer(
     portfolio: dict,
     tone: Literal["beginner", "experienced", "expert"] = "beginner",
+    label: str | None = None,
 ) -> None:
     # Call main pipeline function to generate explanation
     result = explain_portfolio(portfolio, tone=tone)
@@ -107,6 +133,10 @@ def run_explainer(
     explanation = result.get("structured_output")
     critique = result.get("critique")
     raw_text = result.get("raw_text")
+    critic_raw_texts = result.get("critic_raw_texts", [])
+
+    if label:
+        print(f"\n=== {label} ===")
 
     # If errors exist, print them and stop
     if errors:
@@ -120,11 +150,15 @@ def run_explainer(
         return
 
     # Render final explanation output
-    render_explanation(explanation, critique, tone, raw_text)
+    render_explanation(explanation, critique, tone, raw_text, critic_raw_texts)
 
 
 # Main entry point of program
 if __name__ == "__main__":
-    # Run explainer for different user levels (tones)
-    for tone in ("beginner", "experienced", "expert"):
-        run_explainer(EXAMPLE_PORTFOLIO, tone=tone)
+    # Run two examples only
+    for example in EXAMPLE_PORTFOLIOS:
+        run_explainer(
+            example["portfolio"],
+            tone=example["tone"],
+            label=example["label"],
+        )

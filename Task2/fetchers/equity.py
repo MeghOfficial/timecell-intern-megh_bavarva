@@ -1,15 +1,19 @@
 """
 Equity fetcher using a fallback system.
 
-Tries 3 sources:
-1. Twelve Data (used only if API key is available)
-2. Alpha Vantage (used only if API key is available)
-3. yfinance (always used, no API key needed)
+Tries sources in order:
+1. Alpha Vantage (TIME_SERIES_DAILY)
+2. FCS API (with HMAC-SHA256 token)
+3. yfinance (free, no API key needed)
+4. nsepy (for NIFTY50, free, no API key needed)
 """
 
 from __future__ import annotations
 
 import logging
+import time
+import hmac
+import hashlib
 from typing import Callable
 
 import yfinance as yf
@@ -19,9 +23,12 @@ from .base import (
 )
 from ..config import (
     ALPHA_API_KEY, ALPHA_BASE_URL,
+    FCS_PUBLIC_KEY, FCS_API_KEY, FCS_BASE_URL,
     MAX_RETRY_ATTEMPTS, REQUEST_TIMEOUT_SECONDS, RETRY_WAIT_SECONDS,
     TWELVE_API_KEY, TWELVE_BASE_URL,
 )
+
+from ..config import TWELVE_TIME_SERIES_URL
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +40,8 @@ class TransientAPIError(Exception):
 
 def _check_twelve_response(data: dict) -> None:
     """Check Twelve Data response and raise errors if needed."""
-
-    # If price exists, response is valid
-    if "price" in data:
+    # If price exists or time_series 'values' exists, response is valid
+    if "price" in data or "values" in data:
         return
 
     code = data.get("code", 0)
@@ -82,6 +88,27 @@ def _check_alpha_response(data: dict) -> None:
 
 # Fetch price from Twelve Data
 def _fetch_twelve_equity(twelve_symbol: str) -> float:
+    # Prefer the time_series endpoint to get the latest close price
+    params = {"symbol": twelve_symbol, "interval": "1min", "outputsize": 1, "apikey": TWELVE_API_KEY}
+    response = SESSION.get(TWELVE_TIME_SERIES_URL, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    data = response.json()
+
+    # time_series returns 'values' as an array of OHLC points
+    if isinstance(data, dict) and "values" in data and data.get("values"):
+        try:
+            latest = data["values"][0]
+            close = latest.get("close") or latest.get("close")
+            if close is None:
+                # fallback to price endpoint if structure unexpected
+                raise ValueError("no close price in time_series response")
+            logger.info("✓ %s via Twelve Data (time_series %s): %s", twelve_symbol, twelve_symbol, close)
+            return float(close)
+        except Exception:
+            # fall back to the simple price endpoint
+            pass
+
+    # Fallback: call the simple price endpoint if time_series failed to return usable data
     response = SESSION.get(
         TWELVE_BASE_URL,
         params={"symbol": twelve_symbol, "apikey": TWELVE_API_KEY},
@@ -89,10 +116,7 @@ def _fetch_twelve_equity(twelve_symbol: str) -> float:
     )
     response.raise_for_status()
     data = response.json()
-
-    # Validate response
     _check_twelve_response(data)
-
     return float(data["price"])
 
 
@@ -144,6 +168,81 @@ def _fetch_yfinance(yf_symbol: str) -> float:
     return price
 
 
+# Fetch price from FCS API (with HMAC-SHA256 authentication)
+def _fetch_fcs_equity(fcs_symbol: str) -> float:
+    """Fetch equity price from FCS API using HMAC-SHA256 token."""
+    if not FCS_PUBLIC_KEY or not FCS_API_KEY:
+        raise ValueError("FCS API credentials not configured")
+
+    # Generate HMAC-SHA256 token
+    expiry = int(time.time()) + 300  # Token valid for 5 minutes
+    message = FCS_PUBLIC_KEY + str(expiry)
+    token = hmac.new(
+        FCS_API_KEY.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    # Call FCS API
+    params = {
+        "id": fcs_symbol,
+        "_public_key": FCS_PUBLIC_KEY,
+        "_expiry": expiry,
+        "_token": token,
+    }
+
+    response = SESSION.get(
+        FCS_BASE_URL,
+        params=params,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    # Check for errors
+    if data.get("status") != 200:
+        raise ValueError(f"FCS API error: {data.get('msg', 'Unknown error')}")
+
+    # Extract price from response
+    if "response" not in data or not data["response"]:
+        raise ValueError(f"FCS API: no data for {fcs_symbol}")
+
+    response_data = data["response"][0] if isinstance(data["response"], list) else data["response"]
+    price = response_data.get("price") or response_data.get("bid")
+
+    if not price:
+        raise ValueError(f"FCS API: no price for {fcs_symbol}")
+
+    return float(price)
+
+
+# Fetch price from nsepy (for NIFTY50, no API key needed)
+def _fetch_nsepy(symbol: str) -> float:
+    """Fetch NSE data using nsepy library."""
+    try:
+        from nsepy import get_quote
+        quote = get_quote(symbol)
+        
+        # nsepy returns a Series with various fields
+        # Get the lastPrice or close price
+        if hasattr(quote, 'lastPrice'):
+            price = quote['lastPrice']
+        elif hasattr(quote, 'close'):
+            price = quote['close']
+        else:
+            # Try to get price from the series
+            price = quote.get('lastPrice') or quote.get('close')
+        
+        if not price or price == 0.0:
+            raise ValueError(f"nsepy: zero or invalid price for {symbol}")
+        
+        return float(price)
+    except ImportError:
+        raise ValueError("nsepy not installed. Install with: pip install nsepy")
+    except Exception as exc:
+        raise ValueError(f"nsepy failed: {exc}")
+
+
 # Retry wrapper for handling temporary failures
 def _with_retry(
     fn:         Callable[[], float],
@@ -187,68 +286,78 @@ def fetch_equity(
     twelve_symbols: list[str],
     alpha_symbol:  str | None,
     currency:      str,
+    fcs_symbol:    str | None = None,
+    nsepy_symbol:  str | None = None,
 ) -> FetchResult:
     """
     Fetch equity price using fallback approach.
-    Tries multiple APIs until one succeeds.
+    
+    Chains used:
+    - RELIANCE (BSE): Alpha Vantage -> FCS API -> yfinance
+    - NIFTY50: Alpha Vantage -> FCS API -> yfinance -> nsepy
     """
 
     price:       float | None = None
     source_used: str   | None = None
 
-    # Try Twelve Data first (if API key exists)
-    if TWELVE_API_KEY and twelve_symbols:
-        for symbol in twelve_symbols:
-            try:
-                price = _with_retry(
-                    fn=lambda: _fetch_twelve_equity(symbol),
-                    asset_name=name,
-                    provider="Twelve Data",
-                )
-                source_used = "Twelve Data"
-                break
-
-            except Exception as exc:
-                logger.warning(
-                    "%s: Twelve Data failed for %s (%s)",
-                    name, symbol, exc,
-                )
-
-    else:
-        if not TWELVE_API_KEY:
-            logger.error(f"{name}: Twelve Data skipped (API key missing)")
-        elif not twelve_symbols:
-            logger.error(f"{name}: Twelve Data skipped (no symbols provided)")
-
-    # Try Alpha Vantage next
-    if price is None and ALPHA_API_KEY:
-        if alpha_symbol:
-            av_symbol = alpha_symbol
-        else:
-            av_symbol = yf_symbol.replace(".NS", "").replace("^", "")
-
+    # Try Alpha Vantage first
+    if price is None and ALPHA_API_KEY and alpha_symbol:
         try:
             price = _with_retry(
-                fn=lambda: _fetch_alpha_equity(av_symbol),
+                fn=lambda: _fetch_alpha_equity(alpha_symbol),
                 asset_name=name,
                 provider="Alpha Vantage",
             )
             source_used = "Alpha Vantage"
-
+            logger.info("✓ %s via Alpha Vantage: %.2f %s", name, price, currency)
         except Exception as exc:
-            logger.warning(f"{name}: Alpha Vantage failed ({exc})")
+            logger.warning("%s: Alpha Vantage failed (%s). Trying FCS API...", name, exc)
+    
+    # Skip Alpha Vantage silently if API key missing
+    elif price is None and not ALPHA_API_KEY:
+        logger.debug("%s: Alpha Vantage skipped (API key missing). Trying FCS API...", name)
 
-    elif price is None:
-        logger.error(f"{name}: Alpha Vantage skipped (API key missing)")
+    # Try FCS API next
+    if price is None and fcs_symbol:
+        if FCS_PUBLIC_KEY and FCS_API_KEY:
+            try:
+                price = _with_retry(
+                    fn=lambda: _fetch_fcs_equity(fcs_symbol),
+                    asset_name=name,
+                    provider="FCS API",
+                )
+                source_used = "FCS API"
+                logger.info("✓ %s via FCS API: %.2f %s", name, price, currency)
+            except Exception as exc:
+                logger.warning("%s: FCS API failed (%s). Trying yfinance...", name, exc)
+        else:
+            logger.debug("%s: FCS API skipped (credentials missing). Trying yfinance...", name)
 
-    # Final fallback: yfinance
+    # Try yfinance next
     if price is None:
         try:
             price = _fetch_yfinance(yf_symbol)
             source_used = "yfinance"
-
+            logger.info("✓ %s via yfinance: %.2f %s", name, price, currency)
         except Exception as exc:
-            logger.error(f"{name}: all sources failed ({exc})")
+            logger.warning("%s: yfinance failed (%s).", name, exc)
+            
+            # For NIFTY50, try nsepy as last resort
+            if price is None and nsepy_symbol:
+                logger.warning("%s: Trying nsepy...", name)
+
+    # Final fallback: nsepy (only for NIFTY50)
+    if price is None and nsepy_symbol:
+        try:
+            price = _with_retry(
+                fn=lambda: _fetch_nsepy(nsepy_symbol),
+                asset_name=name,
+                provider="nsepy",
+            )
+            source_used = "nsepy"
+            logger.info("✓ %s via nsepy: %.2f %s", name, price, currency)
+        except Exception as exc:
+            logger.error("%s: nsepy failed (%s). All sources exhausted.", name, exc)
 
     # Return success result
     if price is not None and source_used is not None:
@@ -270,8 +379,12 @@ def fetch_equity(
         "%s: all sources failed. Please try again after some time.",
         name,
     )
+    
+    sources_tried = [s for s in ["Alpha Vantage", "FCS API", "yfinance", "nsepy"] if s]
+    error_msg = f"{', '.join(sources_tried)} all failed for {name}"
+    
     return FetchResult(
         success=False,
         asset_name=name,
-        error=f"Twelve Data, Alpha Vantage, yfinance all failed for {name}",
+        error=error_msg,
     )
