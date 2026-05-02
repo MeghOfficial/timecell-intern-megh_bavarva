@@ -1,5 +1,5 @@
 """
-Task 03_1 - AI-Powered Portfolio Explainer (Gemini)
+Task 03_1 - AI-Powered Portfolio Explainer
 """
 
 from __future__ import annotations
