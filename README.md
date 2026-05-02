@@ -348,4 +348,3 @@ The tool forces a **pre‑mortem** – a proven technique to reduce overconfiden
 **User:** Indian HNI investors (family offices / multi‑generational households) who hold concentrated assets and need crash‑resilience guidance.  
 
 **Why this matters:** Unlike numeric dashboards, this tool pairs a bias‑corrected “ghost portfolio” with tripwire warnings – actionable plain‑English advice that existing tools rarely generate.
-```
