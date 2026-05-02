@@ -63,18 +63,34 @@ Claude returned a task overview, explained which tech stack to use and why (in s
 The initial code Claude gave me had API endpoints that were not working.  
 I manually visited the official websites of Twelve Data and Alpha Vantage, generated my own free API keys, and found the correct, working endpoints. Then I fed those back to Claude.
 
+
 ### 3. Adding Fallback Logic
 
 I realised that a single free API key can hit rate limits or experience server errors.  
-So I decided to implement a **fallback chain**:
+So I decided to implement a **fallback chain** – a prioritized list of APIs for each asset. The system tries each source in order; if one fails (rate limit, timeout, server error), it automatically moves to the next.
 
-1. **Try Twelve Data first** (closest to real‑time for crypto & indices)
-2. If that fails, **try Alpha Vantage**
-3. If both fail, **fall back to `yfinance`** (reliable but delayed by ~15 minutes for NSE stocks)
+Based on research and recommendations from DeepSeek and Claude, I chose the following fallback orders.
 
-I found this out from DeepSeek and Claude – they told me to use Twelve Data first as it gives near real-time data, then Alpha Vantage, and finally `yfinance` as it is delayed by nearly 10 to 15 minutes. This ensures the system always returns a price, even when one or two sources are down.
+#### Fallback Order by Asset
 
-I generated the code for this fallback logic using GPT, ran it in a test file, and then gave these files to Claude. I asked Claude to modify the previous code so that it implemented the fallback logic mentioned in my code.
+| **Asset** | **Priority 1** | **Priority 2** | **Priority 3** | **Priority 4** |
+|-----------|----------------|----------------|----------------|----------------|
+| **BTC** (Cryptocurrency) | Twelve Data | CoinGecko | Binance | CoinCap |
+| **RELIANCE** (Stock – BSE) | Alpha Vantage | FCS API | yfinance | – |
+| **NIFTY50** (Index – NSE) | Alpha Vantage | FCS API | yfinance | nsepy |
+
+#### Why This Order?
+
+- **Twelve Data** (for BTC) – closest to real‑time, low latency.
+- **Alpha Vantage** (for stocks/indices) – reliable free tier, though rate‑limited.
+- **FCS API** – generous free plan (500 calls/month), no credit card required.
+- **yfinance** – excellent fallback but delayed by ~15 minutes for NSE/BSE data.
+- **nsepy** – NSE‑specific library, useful as a last resort for NIFTY50.
+
+This layered approach ensures the system always returns a price, even when one or two sources are temporarily down.
+
+
+I went to the official documentation for each API to verify the correct model names and code structure. I then tested the code on my machine in a separate test file. After confirming it worked, I pasted the verified code into GitCopilot and instructed it to modify my current implementation accordingly.
 
 ### 4. Strict Evaluation & Feedback
 
@@ -104,7 +120,8 @@ I also added a `.env` file to the code instead of hardcoding keys, because pushi
 ## Task 3 – AI-Powered Portfolio Explainer
 
 - By providing the Task-3 description and earlier used prompt, I generated the code for Task-3. It gave me code without the bonus part — just a simple Python script using an LLM API.
-- I used the Gemini model because it has a free API key, and I do not have any paid subscription for OpenAI or Anthropic. For confidentiality, I generated and added the key in a `.env` file.
+  
+- I first used the Gemini model because it has a free API key. 
 
 ### Problem faced
 
@@ -135,7 +152,9 @@ Then I pasted this into Git Copilot and gave the prompt:
 
 > *"Use the provided code structure and use the same model as in this code, because this code is from the official docs of Gemini (Google AI Studio)."*
 
-After that, the issue was fixed. I found that sometimes the AI model did not give the output we required — specifically the one‑line verdict — even though it was clearly mentioned in the prompt. So I decided to use the `BaseModel` of Pydantic (a LangChain feature) to enforce the output format we want.
+- After that i decided to used the Groq model because it provides a free API key and is remarkably fast—often returning responses in under a second. Gemini is free too, but it quickly hits rate limits after just a one to two runs. I don't have paid access to OpenAI or Anthropic. For security, I stored the key in a .env file.
+
+- After that, the issue was fixed. I found that sometimes the AI model did not give the output we required — specifically the one‑line verdict — even though it was clearly mentioned in the prompt. So I decided to use the `BaseModel` of Pydantic (a LangChain feature) to enforce the output format we want.
 
 - I also told Git Copilot to add `HumanMessage`, `AIMessage`, and `SystemMessage` for clear message context to the LLM. It just printed the output, but as mentioned in the problem, we needed to print the AI raw response as well, so I asked it to add the API raw response.
 
